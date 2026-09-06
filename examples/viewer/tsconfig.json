@@ -1,0 +1,21 @@
+{
+	"compilerOptions": {
+		"target": "ES2022",
+		"lib": ["ES2022", "DOM", "DOM.Iterable"],
+		"module": "ESNext",
+		"moduleResolution": "Bundler",
+		"jsx": "react-jsx",
+		"strict": true,
+		"skipLibCheck": true,
+		"noEmit": true,
+		"allowImportingTsExtensions": true,
+		"esModuleInterop": true,
+		"baseUrl": ".",
+		"paths": {
+			"@/*": ["src/*"],
+			"@mochiya/avatar-asset-runtime": ["../../src/index.ts"],
+			"@mochiya/avatar-asset-runtime/liltoon": ["../../src/liltoon.ts"]
+		}
+	},
+	"include": ["src", "vite.config.ts"]
+}

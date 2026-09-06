@@ -1,0 +1,13 @@
+# Dependencies and generated outputs are managed by their tools.
+**/node_modules/
+**/dist/
+schema/
+**/package-lock.json
+**/*.tsbuildinfo
+
+# Local Unity assets and verification artifacts.
+test/unity-project/
+**/coverage/
+**/.tmp/
+**/playwright-report/
+**/test-results/

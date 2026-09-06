@@ -1,0 +1,79 @@
+{
+	"name": "@mochiya/avatar-asset-runtime",
+	"version": "0.1.0",
+	"description": "Avatar attachment overlays for Three.js and the MOCHIYA_avatar_asset glTF extension",
+	"type": "module",
+	"license": "MIT",
+	"sideEffects": false,
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		},
+		"./liltoon": {
+			"types": "./dist/liltoon.d.ts",
+			"import": "./dist/liltoon.js"
+		},
+		"./schema": "./schema/MOCHIYA_avatar_asset.schema.json"
+	},
+	"files": [
+		"dist",
+		"src",
+		"schema",
+		"tsconfig.json",
+		"tsup.config.ts",
+		"scripts",
+		"examples/viewer/src",
+		"examples/viewer/index.html",
+		"examples/viewer/package.json",
+		"examples/viewer/tsconfig.json",
+		"examples/viewer/vite.config.ts",
+		"README.md",
+		"LICENSE"
+	],
+	"workspaces": [
+		"examples/viewer"
+	],
+	"scripts": {
+		"format": "prettier --write .",
+		"format:check": "prettier --check .",
+		"build": "tsup && node scripts/generate-schema.mjs",
+		"typecheck": "tsc --noEmit",
+		"test": "vitest run",
+		"viewer:dev": "npm run dev --workspace @mochiya/avatar-asset-viewer",
+		"viewer:build": "npm run build --workspace @mochiya/avatar-asset-viewer",
+		"test:browser": "playwright test"
+	},
+	"engines": {
+		"node": ">=20.19"
+	},
+	"dependencies": {
+		"zod": "^3.25.0"
+	},
+	"peerDependencies": {
+		"@pixiv/three-vrm": ">=3.4.0 <4",
+		"three": ">=0.180.0 <0.190.0",
+		"three-liltoon": ">=0.1.0"
+	},
+	"peerDependenciesMeta": {
+		"three-liltoon": {
+			"optional": true
+		}
+	},
+	"devDependencies": {
+		"@pixiv/three-vrm": "^3.5.5",
+		"@playwright/test": "^1.62.1",
+		"@types/node": "^24.3.0",
+		"@types/three": "^0.185.4",
+		"agent-browser": "^0.36.0",
+		"prettier": "3.9.6",
+		"three": "^0.185.1",
+		"three-liltoon": "file:../three-liltoon",
+		"tsup": "^8.5.0",
+		"typescript": "^5.9.2",
+		"vitest": "^3.2.4",
+		"zod-to-json-schema": "^3.25.2"
+	}
+}
