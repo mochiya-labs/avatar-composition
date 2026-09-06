@@ -300,6 +300,105 @@ test("local attachment controls, hide, removal and base replacement", async ({
 	expect(errors).toEqual([]);
 });
 
+test("VRM debug visualizers are off by default and toggle per asset", async ({
+	page,
+}) => {
+	const errors: string[] = [];
+	page.on("pageerror", (error) => errors.push(error.message));
+	await page.goto("/");
+	await loadBase(page);
+	await page.getByLabel("Attachment file", { exact: true }).setInputFiles(
+		assetFixture("debug-attachment.vrm", "attachment", undefined, {
+			springBones: true,
+		}),
+	);
+
+	const attachmentToggle = page.getByRole("switch", {
+		name: "Show debug visualizers debug-attachment.vrm",
+	});
+	await expect(attachmentToggle).not.toBeChecked();
+	expect(
+		await page.evaluate(() => {
+			const state = Reflect.get(window, "mochiyaViewer").getSnapshot();
+			const base = state.base;
+			const attachment = state.attachments[0];
+			return {
+				baseVisible: base.debugVisualizers.root.visible,
+				attachmentVisible: attachment.debugVisualizers.root.visible,
+				helperTypes: attachment.debugVisualizers.root.children.map(
+					(child: { constructor: { name: string } }) => child.constructor.name,
+				),
+			};
+		}),
+	).toEqual({
+		baseVisible: false,
+		attachmentVisible: false,
+		helperTypes: expect.arrayContaining([
+			"VRMHumanoidHelper",
+			"VRMSpringBoneJointHelper",
+			"VRMSpringBoneColliderHelper",
+		]),
+	});
+
+	await attachmentToggle.click();
+	await expect(attachmentToggle).toBeChecked();
+	await expect
+		.poll(() =>
+			page.evaluate(
+				() =>
+					Reflect.get(window, "mochiyaViewer").getSnapshot().attachments[0]
+						.debugVisualizers.root.visible,
+			),
+		)
+		.toBe(true);
+
+	await page.getByRole("button", { name: "Hide debug-attachment.vrm" }).click();
+	await expect
+		.poll(() =>
+			page.evaluate(
+				() =>
+					Reflect.get(window, "mochiyaViewer").getSnapshot().attachments[0]
+						.debugVisualizers.root.visible,
+			),
+		)
+		.toBe(false);
+	await page.getByRole("button", { name: "Show debug-attachment.vrm" }).click();
+	await expect
+		.poll(() =>
+			page.evaluate(
+				() =>
+					Reflect.get(window, "mochiyaViewer").getSnapshot().attachments[0]
+						.debugVisualizers.root.visible,
+			),
+		)
+		.toBe(true);
+
+	await page.getByRole("button", { name: "avatar.vrm Current base" }).click();
+	const baseToggle = page.getByRole("switch", {
+		name: "Show debug visualizers avatar.vrm",
+	});
+	await expect(baseToggle).not.toBeChecked();
+	await page.evaluate(() => {
+		Reflect.set(
+			window,
+			"removedDebugRoot",
+			Reflect.get(window, "mochiyaViewer").getSnapshot().attachments[0]
+				.debugVisualizers.root,
+		);
+	});
+	await page
+		.getByRole("button", { name: "Remove debug-attachment.vrm" })
+		.click();
+	expect(
+		await page.evaluate(() => {
+			const root = Reflect.get(window, "removedDebugRoot");
+			Reflect.deleteProperty(window, "removedDebugRoot");
+			return { parent: root.parent, children: root.children.length };
+		}),
+	).toEqual({ parent: null, children: 0 });
+	expect(errors).toEqual([]);
+});
+
 test("unmatched names warn while matched actions still run", async ({
 	page,
 }) => {

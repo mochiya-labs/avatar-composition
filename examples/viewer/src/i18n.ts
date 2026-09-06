@@ -47,6 +47,10 @@ export const messages = {
 		language: "Language",
 		desktop: "Drag to orbit · Scroll to zoom",
 		emptyControls: "This asset has no portable controls.",
+		debugVisualizers: "VRM debug visualizers",
+		showDebugVisualizers: "Show debug visualizers",
+		debugVisualizersHint:
+			"Shows available humanoid, look-at, constraint, spring joint, and collider helpers for this VRM.",
 		error: "Asset could not be loaded",
 		technical: "Avatar asset runtime · VRM + lilToon",
 		position: "Placement follows matching bones",
@@ -102,6 +106,10 @@ export const messages = {
 		language: "言語",
 		desktop: "ドラッグで回転 · スクロールでズーム",
 		emptyControls: "このアセットに操作項目はありません。",
+		debugVisualizers: "VRMデバッグ表示",
+		showDebugVisualizers: "デバッグ表示を有効にする",
+		debugVisualizersHint:
+			"このVRMで利用できるヒューマノイド、視線、コンストレイント、スプリングジョイント、コライダーのヘルパーを表示します。",
 		error: "読み込みに失敗しました",
 		technical: "Avatar asset runtime · VRM + lilToon",
 		position: "一致するボーンに追従",

@@ -24,7 +24,7 @@ export function assetFixture(
 	name: string,
 	kind: "avatar" | "attachment",
 	edit?: (manifest: AvatarAssetManifest) => void,
-	options: { lilToonExpressions?: boolean } = {},
+	options: { lilToonExpressions?: boolean; springBones?: boolean } = {},
 ) {
 	const meshName = kind === "avatar" ? "Body" : "Attachment";
 	const manifest = parseManifest({
@@ -213,6 +213,34 @@ export function assetFixture(
 						}
 					: {},
 			},
+		};
+	if (name.endsWith(".vrm") && options.springBones)
+		extensions.VRMC_springBone = {
+			specVersion: "1.0",
+			colliders: [
+				{
+					node: 0,
+					shape: { sphere: { offset: [0, 0.1, 0], radius: 0.08 } },
+				},
+			],
+			colliderGroups: [{ name: "Body", colliders: [0] }],
+			springs: [
+				{
+					name: "Spine",
+					joints: [
+						{
+							node: 1,
+							hitRadius: 0.02,
+							stiffness: 1,
+							gravityPower: 0,
+							gravityDir: [0, -1, 0],
+							dragForce: 0.4,
+						},
+						{ node: 2 },
+					],
+					colliderGroups: [0],
+				},
+			],
 		};
 	const gltf = {
 		asset: { version: "2.0", generator: "Mochiya browser tests" },

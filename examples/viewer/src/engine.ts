@@ -1,4 +1,12 @@
-import { AnimationMixer, type Scene, type WebGLRenderer } from "three";
+import {
+	AnimationMixer,
+	BufferGeometry,
+	Group,
+	Material,
+	type Object3D,
+	type Scene,
+	type WebGLRenderer,
+} from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { VRMLoaderPlugin, VRMUtils } from "@pixiv/three-vrm";
 import {
@@ -26,8 +34,39 @@ export interface ViewerItem {
 	label: string;
 	asset: AvatarAsset;
 	visible: boolean;
+	debugVisualizers: ViewerDebugVisualizers;
+	debugVisualizersVisible: boolean;
 	controls: Record<string, number | boolean>;
 	result?: Attachment;
+}
+export interface ViewerDebugVisualizers {
+	root: Group;
+	count: number;
+}
+
+interface LoadedViewerAsset {
+	asset: AvatarAsset;
+	debugVisualizers: ViewerDebugVisualizers;
+}
+
+function disposeDebugVisualizers(debug: ViewerDebugVisualizers) {
+	debug.root.removeFromParent();
+	const geometries = new Set<BufferGeometry>();
+	const materials = new Set<Material>();
+	debug.root.traverse((object) => {
+		const renderable = object as Object3D & {
+			geometry?: BufferGeometry;
+			material?: Material | Material[];
+		};
+		if (renderable.geometry) geometries.add(renderable.geometry);
+		const assigned = renderable.material;
+		if (Array.isArray(assigned))
+			assigned.forEach((material) => materials.add(material));
+		else if (assigned) materials.add(assigned);
+	});
+	geometries.forEach((geometry) => geometry.dispose());
+	materials.forEach((material) => material.dispose());
+	debug.root.clear();
 }
 export interface ViewerSnapshot {
 	base?: ViewerItem;
@@ -85,11 +124,14 @@ export class ViewerEngine {
 				this.patch({ busy: Math.max(0, this.snapshot.busy - 1) });
 		}
 	}
-	private loader(warnings: CompositionWarning[]) {
+	private loader(warnings: CompositionWarning[], helperRoot: Group) {
 		return new GLTFLoader()
 			.register((parser) =>
 				enableLilToonVRM(
-					new VRMLoaderPlugin(parser, { autoUpdateHumanBones: true }),
+					new VRMLoaderPlugin(parser, {
+						autoUpdateHumanBones: true,
+						helperRoot,
+					}),
 					{
 						onWarning: (w) =>
 							warnings.push({ code: "LILTOON", message: w.message }),
@@ -101,26 +143,55 @@ export class ViewerEngine {
 	private async load(
 		file: File,
 		warnings: CompositionWarning[],
-	): Promise<AvatarAsset> {
+	): Promise<LoadedViewerAsset> {
 		if (!/\.(vrm|glb)$/i.test(file.name))
 			throw new Error("Choose a binary .vrm or .glb model.");
-		const gltf = await this.loader(warnings).parseAsync(
-			await file.arrayBuffer(),
-			"",
-		);
+		const helperRoot = new Group();
+		helperRoot.name = `VRM debug visualizers: ${file.name}`;
+		helperRoot.renderOrder = 10_000;
+		helperRoot.visible = false;
+		let gltf;
+		try {
+			gltf = await this.loader(warnings, helperRoot).parseAsync(
+				await file.arrayBuffer(),
+				"",
+			);
+		} catch (error) {
+			disposeDebugVisualizers({
+				root: helperRoot,
+				count: helperRoot.children.length,
+			});
+			throw error;
+		}
 		const vrm = gltf.userData.vrm;
 		if (vrm) VRMUtils.rotateVRM0(vrm);
-		const asset = await prepareAvatarAsset(gltf);
-		return asset;
+		let asset: AvatarAsset;
+		try {
+			asset = await prepareAvatarAsset(gltf);
+		} catch (error) {
+			disposeDebugVisualizers({
+				root: helperRoot,
+				count: helperRoot.children.length,
+			});
+			throw error;
+		}
+		return {
+			asset,
+			debugVisualizers: { root: helperRoot, count: helperRoot.children.length },
+		};
 	}
-	private prepare(asset: AvatarAsset) {
+	private prepare(item: LoadedViewerAsset) {
+		const { asset, debugVisualizers } = item;
 		for (const mesh of asset.meshes) {
 			mesh.castShadow = true;
 			mesh.receiveShadow = true;
 		}
 		this.scene.add(asset.scene);
+		this.scene.add(debugVisualizers.root);
 	}
-	private release(asset: AvatarAsset) {
+	private release(item: Pick<ViewerItem, "asset" | "debugVisualizers">) {
+		const { asset, debugVisualizers } = item;
+		disposeDebugVisualizers(debugVisualizers);
 		if (asset.vrm) uninstallLilToonExpressionBindings(asset.vrm);
 		disposeAvatarAsset(asset);
 	}
@@ -128,12 +199,12 @@ export class ViewerEngine {
 		const request = ++this.request;
 		await this.task(async () => {
 			const warnings: CompositionWarning[] = [];
-			const asset = await this.load(file, warnings);
+			const loaded = await this.load(file, warnings);
 			if (this.disposed || request !== this.request) {
-				disposeAvatarAsset(asset);
+				this.release(loaded);
 				return;
 			}
-			this.replaceBase(asset, file.name, warnings);
+			this.replaceBase(loaded, file.name, warnings);
 		});
 	}
 	async loadAttachment(file: File) {
@@ -144,19 +215,20 @@ export class ViewerEngine {
 		const generation = this.generation;
 		await this.task(async () => {
 			const warnings: CompositionWarning[] = [];
-			const asset = await this.load(file, warnings);
+			const loaded = await this.load(file, warnings);
 			if (this.disposed || generation !== this.generation) {
-				disposeAvatarAsset(asset);
+				this.release(loaded);
 				return;
 			}
-			this.add(asset, file.name, warnings);
+			this.add(loaded, file.name, warnings);
 		});
 	}
 	private replaceBase(
-		asset: AvatarAsset,
+		loaded: LoadedViewerAsset,
 		label: string,
 		warnings: CompositionWarning[],
 	) {
+		const { asset, debugVisualizers } = loaded;
 		// Validate the incoming base before releasing the existing workspace.
 		let nextSession: AvatarCompositionSession;
 		try {
@@ -164,15 +236,23 @@ export class ViewerEngine {
 				base: asset,
 			});
 		} catch (error) {
-			disposeAvatarAsset(asset);
+			this.release(loaded);
 			throw error;
 		}
 		this.clear();
 		++this.generation;
-		this.prepare(asset);
+		this.prepare(loaded);
 		this.session = nextSession;
 		this.patch({
-			base: { id: "base", label, asset, visible: true, controls: {} },
+			base: {
+				id: "base",
+				label,
+				asset,
+				visible: true,
+				debugVisualizers,
+				debugVisualizersVisible: false,
+				controls: {},
+			},
 			attachments: [],
 			selected: "base",
 			warnings: [...warnings, ...nextSession.warnings],
@@ -181,13 +261,14 @@ export class ViewerEngine {
 		});
 	}
 	private add(
-		asset: AvatarAsset,
+		loaded: LoadedViewerAsset,
 		label: string,
 		warnings: CompositionWarning[],
 	) {
+		const { asset, debugVisualizers } = loaded;
 		const id = crypto.randomUUID();
 		try {
-			this.prepare(asset);
+			this.prepare(loaded);
 			const result = this.session!.attach(asset, {
 				id,
 				layerOrder: this.snapshot.attachments.length,
@@ -195,14 +276,23 @@ export class ViewerEngine {
 			this.patch({
 				attachments: [
 					...this.snapshot.attachments,
-					{ id, label, asset, visible: true, controls: {}, result },
+					{
+						id,
+						label,
+						asset,
+						visible: true,
+						debugVisualizers,
+						debugVisualizersVisible: false,
+						controls: {},
+						result,
+					},
 				],
 				selected: id,
 				warnings: [...this.snapshot.warnings, ...warnings],
 				error: undefined,
 			});
 		} catch (error) {
-			this.release(asset);
+			this.release(loaded);
 			this.patch({
 				error: error instanceof Error ? error.message : String(error),
 			});
@@ -227,7 +317,7 @@ export class ViewerEngine {
 		const item = this.snapshot.attachments.find((x) => x.id === id);
 		if (!item) return;
 		this.session?.detach(id);
-		this.release(item.asset);
+		this.release(item);
 		this.patch({
 			attachments: this.snapshot.attachments.filter((x) => x.id !== id),
 			selected: "base",
@@ -236,12 +326,33 @@ export class ViewerEngine {
 	toggle(id: string) {
 		const item = this.snapshot.attachments.find((x) => x.id === id);
 		if (!item) return;
-		this.session?.setItemState(id, { visible: !item.visible });
+		const visible = !item.visible;
+		this.session?.setItemState(id, { visible });
+		item.debugVisualizers.root.visible =
+			visible && item.debugVisualizersVisible;
 		this.patch({
 			attachments: this.snapshot.attachments.map((x) =>
-				x.id === id ? { ...x, visible: !x.visible } : x,
+				x.id === id ? { ...x, visible } : x,
 			),
 		});
+	}
+	setDebugVisualizers(id: string, visible: boolean) {
+		const item =
+			id === "base"
+				? this.snapshot.base
+				: this.snapshot.attachments.find((entry) => entry.id === id);
+		if (!item?.asset.vrm) return;
+		item.debugVisualizers.root.visible = item.visible && visible;
+		if (id === "base")
+			this.patch({ base: { ...item, debugVisualizersVisible: visible } });
+		else
+			this.patch({
+				attachments: this.snapshot.attachments.map((entry) =>
+					entry.id === id
+						? { ...entry, debugVisualizersVisible: visible }
+						: entry,
+				),
+			});
 	}
 	setControl(id: string, control: string, value: number | boolean) {
 		if (id === "base") this.session?.setBaseControl(control, value);
@@ -332,8 +443,8 @@ export class ViewerEngine {
 		this.stopAnimation();
 		this.session?.dispose();
 		this.session = undefined;
-		this.snapshot.attachments.forEach((item) => this.release(item.asset));
-		if (this.snapshot.base) this.release(this.snapshot.base.asset);
+		this.snapshot.attachments.forEach((item) => this.release(item));
+		if (this.snapshot.base) this.release(this.snapshot.base);
 	}
 	dispose() {
 		if (this.disposed) return;

@@ -126,6 +126,27 @@ export function Inspector({
 					</Badge>
 				</div>
 			</div>
+			{item.asset.vrm && (
+				<>
+					<Separator />
+					<section className="space-y-3">
+						<h3 className="text-xs font-medium">{t.debugVisualizers}</h3>
+						<label className="flex items-center justify-between gap-3 text-xs">
+							<span>{t.showDebugVisualizers}</span>
+							<Switch
+								aria-label={`${t.showDebugVisualizers} ${item.label}`}
+								checked={item.debugVisualizersVisible}
+								onCheckedChange={(checked) =>
+									engine?.setDebugVisualizers(item.id, checked)
+								}
+							/>
+						</label>
+						<p className="text-[11px] leading-relaxed text-muted-foreground">
+							{t.debugVisualizersHint}
+						</p>
+					</section>
+				</>
+			)}
 			{item.result && (
 				<>
 					<Separator />
