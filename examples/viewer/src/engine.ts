@@ -34,6 +34,8 @@ export interface ViewerItem {
 	label: string;
 	asset: AvatarAsset;
 	visible: boolean;
+	warnings: CompositionWarning[];
+	hiddenMeshes: ReadonlySet<string>;
 	debugVisualizers: ViewerDebugVisualizers;
 	debugVisualizersVisible: boolean;
 	controls: Record<string, number | boolean>;
@@ -249,13 +251,15 @@ export class ViewerEngine {
 				label,
 				asset,
 				visible: true,
+				warnings,
+				hiddenMeshes: new Set(),
 				debugVisualizers,
 				debugVisualizersVisible: false,
 				controls: {},
 			},
 			attachments: [],
 			selected: "base",
-			warnings: [...warnings, ...nextSession.warnings],
+			warnings: [...nextSession.warnings],
 			error: undefined,
 			animation: undefined,
 		});
@@ -281,6 +285,8 @@ export class ViewerEngine {
 						label,
 						asset,
 						visible: true,
+						warnings,
+						hiddenMeshes: new Set(),
 						debugVisualizers,
 						debugVisualizersVisible: false,
 						controls: {},
@@ -288,7 +294,7 @@ export class ViewerEngine {
 					},
 				],
 				selected: id,
-				warnings: [...this.snapshot.warnings, ...warnings],
+				warnings: this.snapshot.warnings,
 				error: undefined,
 			});
 		} catch (error) {
@@ -351,6 +357,27 @@ export class ViewerEngine {
 					entry.id === id
 						? { ...entry, debugVisualizersVisible: visible }
 						: entry,
+				),
+			});
+	}
+	setMeshVisible(id: string, meshId: string, visible: boolean) {
+		const item =
+			id === "base"
+				? this.snapshot.base
+				: this.snapshot.attachments.find((entry) => entry.id === id);
+		const mesh = item?.asset.meshes.find((entry) => entry.uuid === meshId);
+		if (!item || !mesh) return;
+
+		const hiddenMeshes = new Set(item.hiddenMeshes);
+		if (visible) hiddenMeshes.delete(meshId);
+		else hiddenMeshes.add(meshId);
+		mesh.visible = visible;
+
+		if (id === "base") this.patch({ base: { ...item, hiddenMeshes } });
+		else
+			this.patch({
+				attachments: this.snapshot.attachments.map((entry) =>
+					entry.id === id ? { ...entry, hiddenMeshes } : entry,
 				),
 			});
 	}
@@ -424,6 +451,12 @@ export class ViewerEngine {
 		base.vrm?.update(dt);
 		this.scene.updateMatrixWorld(true);
 		this.session.afterVrmUpdate(dt);
+		for (const item of [
+			...(this.snapshot.base ? [this.snapshot.base] : []),
+			...this.snapshot.attachments,
+		])
+			for (const mesh of item.asset.meshes)
+				if (item.hiddenMeshes.has(mesh.uuid)) mesh.visible = false;
 		// Base materials are advanced by vrm.update. Attachment humanoids stay
 		// inactive; their material animation belongs to this viewer.
 		const updated = new Set(base.vrm?.materials ?? []);

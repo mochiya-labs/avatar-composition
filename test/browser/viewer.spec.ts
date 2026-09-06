@@ -300,6 +300,47 @@ test("local attachment controls, hide, removal and base replacement", async ({
 	expect(errors).toEqual([]);
 });
 
+test("inspector controls meshes, blendshapes, and the collapsed bone tree", async ({
+	page,
+}) => {
+	await page.goto("/");
+	await loadBase(page);
+
+	const meshVisibility = page.getByRole("switch", {
+		name: "Mesh visibility: Body",
+	});
+	await expect(meshVisibility).toBeChecked();
+	await meshVisibility.click();
+	await expect(meshVisibility).not.toBeChecked();
+	await expect
+		.poll(() =>
+			page.evaluate(
+				() =>
+					Reflect.get(window, "mochiyaViewer").getSnapshot().base.asset
+						.meshes[0].visible,
+			),
+		)
+		.toBe(false);
+	await meshVisibility.click();
+	await expect(meshVisibility).toBeChecked();
+
+	const blendshapes = page.getByLabel("Body blendshapes");
+	await expect(
+		page.getByRole("slider", { name: "Body_Slim" }),
+	).not.toBeVisible();
+	await blendshapes.click();
+	await expect(page.getByRole("slider", { name: "Body_Slim" })).toBeVisible();
+
+	const boneTree = page.locator('details[data-section="bones"]');
+	await expect(boneTree).not.toHaveAttribute("open", "");
+	await expect(page.getByText("hips", { exact: true })).not.toBeVisible();
+	await boneTree.locator(":scope > summary").click();
+	await expect(page.getByText("hips", { exact: true })).toBeVisible();
+	await expect(page.getByText("spine", { exact: true })).not.toBeVisible();
+	await page.getByText("hips", { exact: true }).click();
+	await expect(page.getByText("spine", { exact: true })).toBeVisible();
+});
+
 test("VRM debug visualizers are off by default and toggle per asset", async ({
 	page,
 }) => {
@@ -404,12 +445,17 @@ test("unmatched names warn while matched actions still run", async ({
 }) => {
 	await page.goto("/");
 	await loadBase(page);
-	const partial = assetFixture("partial.vrm", "attachment", (manifest) => {
-		manifest.rig!.jointMappings[0].target = {
-			asset: "base",
-			boneKeywords: ["MissingTestBone"],
-		};
-	});
+	const partial = assetFixture(
+		"partial.vrm",
+		"attachment",
+		(manifest) => {
+			manifest.rig!.jointMappings[0].target = {
+				asset: "base",
+				boneKeywords: ["MissingTestBone"],
+			};
+		},
+		{ lilToonSpecVersion: "9.0" },
+	);
 	await page
 		.getByLabel("Attachment file", { exact: true })
 		.setInputFiles(partial);
@@ -417,8 +463,18 @@ test("unmatched names warn while matched actions still run", async ({
 		page.getByRole("button", { name: "partial.vrm Partial" }),
 	).toBeVisible();
 	await expect(
-		page.getByRole("heading", { name: "Warnings (1)" }),
+		page.getByRole("heading", { name: "Warnings (2)" }),
 	).toBeVisible();
+	await expect(
+		page.getByText("MissingTestBone", { exact: true }),
+	).not.toBeVisible();
+	await expect(page.getByText(/spec 9\.0/)).not.toBeVisible();
+	await page.getByLabel("Composition warnings (1)").click();
+	await expect(
+		page.getByText("MissingTestBone", { exact: true }),
+	).toBeVisible();
+	await page.getByLabel("lilToon warnings (1)").click();
+	await expect(page.getByText(/spec 9\.0/)).toBeVisible();
 	await expect.poll(() => weight(page)).toBe(0.4);
 	expect(
 		await page.evaluate(

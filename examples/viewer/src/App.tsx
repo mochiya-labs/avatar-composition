@@ -165,7 +165,11 @@ export default function App() {
 			: view.attachments.find((x) => x.id === view.selected);
 	const warnings =
 		view.warnings.length +
-		view.attachments.reduce((n, x) => n + (x.result?.warnings.length ?? 0), 0);
+		(view.base?.warnings.length ?? 0) +
+		view.attachments.reduce(
+			(n, x) => n + x.warnings.length + (x.result?.warnings.length ?? 0),
+			0,
+		);
 	const choose = (kind: "base" | "attachment" | "animation") =>
 		(kind === "base"
 			? baseInput

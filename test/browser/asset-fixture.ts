@@ -27,7 +27,11 @@ export function assetFixture(
 	name: string,
 	kind: "avatar" | "attachment",
 	edit?: (manifest: AvatarCompositionManifest) => void,
-	options: { lilToonExpressions?: boolean; springBones?: boolean } = {},
+	options: {
+		lilToonExpressions?: boolean;
+		lilToonSpecVersion?: string;
+		springBones?: boolean;
+	} = {},
 ) {
 	const meshName = kind === "avatar" ? "Body" : "Attachment";
 	const manifest = parseManifest({
@@ -270,21 +274,22 @@ export function assetFixture(
 		skins: [skin],
 		materials: [
 			{
-				extensions: options.lilToonExpressions
-					? {
-							MOCHIYA_materials_liltoon: {
-								specVersion: "1.0",
-								renderMode: "opaque",
-								properties: {
-									_Color: [0.4, 0.5, 0.6, 1],
-									_OutlineColor: [0, 0, 0, 1],
-									_MainTex_ST: [1, 1, 0, 0],
-									_OutlineWidth: 0.03,
-									_UseOutline: 1,
+				extensions:
+					options.lilToonExpressions || options.lilToonSpecVersion
+						? {
+								MOCHIYA_materials_liltoon: {
+									specVersion: options.lilToonSpecVersion ?? "1.0",
+									renderMode: "opaque",
+									properties: {
+										_Color: [0.4, 0.5, 0.6, 1],
+										_OutlineColor: [0, 0, 0, 1],
+										_MainTex_ST: [1, 1, 0, 0],
+										_OutlineWidth: 0.03,
+										_UseOutline: 1,
+									},
 								},
-							},
-						}
-					: undefined,
+							}
+						: undefined,
 				pbrMetallicRoughness: {
 					baseColorFactor: [0.4, 0.5, 0.6, 1],
 					metallicFactor: 0,
@@ -294,7 +299,9 @@ export function assetFixture(
 		],
 		extensionsUsed: [
 			...Object.keys(extensions),
-			...(options.lilToonExpressions ? ["MOCHIYA_materials_liltoon"] : []),
+			...(options.lilToonExpressions || options.lilToonSpecVersion
+				? ["MOCHIYA_materials_liltoon"]
+				: []),
 		],
 		extensions,
 		buffers: [{ byteLength }],

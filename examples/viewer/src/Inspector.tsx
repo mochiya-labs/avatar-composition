@@ -1,12 +1,20 @@
 import { useState } from "react";
-import { CheckCircleIcon, WarningCircleIcon } from "@phosphor-icons/react";
+import {
+	CaretRightIcon,
+	CheckCircleIcon,
+	WarningCircleIcon,
+} from "@phosphor-icons/react";
+import type { Bone, Mesh } from "three";
 import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import type { ViewerEngine, ViewerItem, ViewerSnapshot } from "./engine";
 import type { Labels } from "./i18n";
-import type { AvatarCompositionManifest } from "@mochiya/avatar-composition";
+import type {
+	AvatarCompositionManifest,
+	CompositionWarning,
+} from "@mochiya/avatar-composition";
 
 export function ValueControl({
 	label,
@@ -46,6 +54,7 @@ export function ValueControl({
 		</div>
 	);
 }
+
 function AssetControl({
 	control,
 	item,
@@ -90,6 +99,181 @@ function AssetControl({
 		</label>
 	);
 }
+
+function WarningAccordion({
+	title,
+	warnings,
+}: {
+	title: string;
+	warnings: CompositionWarning[];
+}) {
+	if (!warnings.length) return null;
+	return (
+		<details className="group overflow-hidden rounded-md border bg-muted/20">
+			<summary
+				aria-label={`${title} (${warnings.length})`}
+				className="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 text-xs font-medium marker:hidden"
+			>
+				<CaretRightIcon className="shrink-0 transition-transform group-open:rotate-90" />
+				<span className="min-w-0 flex-1 truncate">{title}</span>
+				<Badge variant="outline">{warnings.length}</Badge>
+			</summary>
+			<div className="space-y-2 border-t p-2">
+				{warnings.map((warning, index) => (
+					<div
+						key={`${warning.code}-${index}`}
+						className="space-y-1 rounded-md bg-muted/60 p-2.5"
+					>
+						<p className="text-[10px] font-medium">
+							{warning.code}
+							{warning.operation ? ` · ${warning.operation}` : ""}
+						</p>
+						<p className="break-words text-[11px] leading-relaxed text-muted-foreground">
+							{warning.message}
+						</p>
+						{warning.query && (
+							<p className="break-words text-[10px] text-muted-foreground">
+								{[
+									...(warning.query.boneKeywords ?? []),
+									...(warning.query.blendshapeKeywords ?? []),
+								].join(", ")}
+							</p>
+						)}
+					</div>
+				))}
+			</div>
+		</details>
+	);
+}
+
+function BoneBranch({ bone, boneSet }: { bone: Bone; boneSet: Set<Bone> }) {
+	const children = [...boneSet]
+		.filter((child) => parentBone(child, boneSet) === bone)
+		.sort((a, b) => a.name.localeCompare(b.name));
+	const name = bone.name || "(unnamed)";
+	return (
+		<li>
+			{children.length ? (
+				<details>
+					<summary className="cursor-pointer py-0.5 text-[11px]">
+						{name}
+					</summary>
+					<ul className="ml-2 border-l pl-3">
+						{children.map((child) => (
+							<BoneBranch key={child.uuid} bone={child} boneSet={boneSet} />
+						))}
+					</ul>
+				</details>
+			) : (
+				<span className="block py-0.5 text-[11px]">{name}</span>
+			)}
+		</li>
+	);
+}
+
+function parentBone(bone: Bone, boneSet: Set<Bone>): Bone | undefined {
+	for (let parent = bone.parent; parent; parent = parent.parent)
+		if ((parent as Bone).isBone && boneSet.has(parent as Bone))
+			return parent as Bone;
+	return undefined;
+}
+
+function BoneTree({ bones }: { bones: Bone[] }) {
+	const boneSet = new Set(bones);
+	const roots = bones
+		.filter((bone) => !parentBone(bone, boneSet))
+		.sort((a, b) => a.name.localeCompare(b.name));
+	return (
+		<ul className="space-y-0.5">
+			{roots.map((bone) => (
+				<BoneBranch key={bone.uuid} bone={bone} boneSet={boneSet} />
+			))}
+		</ul>
+	);
+}
+
+function MeshCard({
+	engine,
+	item,
+	mesh,
+	index,
+	t,
+}: {
+	engine?: ViewerEngine;
+	item: ViewerItem;
+	mesh: Mesh;
+	index: number;
+	t: Labels;
+}) {
+	const name = mesh.name || `${t.unnamedMesh} ${index + 1}`;
+	const blendshapes = Object.entries(mesh.morphTargetDictionary ?? {}).sort(
+		([a], [b]) => a.localeCompare(b),
+	);
+	const visible = mesh.visible && !item.hiddenMeshes.has(mesh.uuid);
+	return (
+		<div className="space-y-2.5 rounded-md border p-3">
+			<div className="flex items-center justify-between gap-3">
+				<div className="min-w-0">
+					<p className="truncate text-xs font-medium" title={name}>
+						{name}
+					</p>
+					<p className="text-[10px] text-muted-foreground">
+						{blendshapes.length} {t.blendshapes}
+					</p>
+				</div>
+				<Switch
+					aria-label={`${t.meshVisibility}: ${name}`}
+					checked={visible}
+					onCheckedChange={(checked) =>
+						engine?.setMeshVisible(item.id, mesh.uuid, checked)
+					}
+				/>
+			</div>
+			{blendshapes.length ? (
+				<details className="group/blendshapes">
+					<summary
+						aria-label={`${name} ${t.blendshapes}`}
+						className="flex cursor-pointer list-none items-center gap-2 border-t pt-2 text-[11px] text-muted-foreground marker:hidden"
+					>
+						<CaretRightIcon className="transition-transform group-open/blendshapes:rotate-90" />
+						{t.showBlendshapes}
+					</summary>
+					<div className="mt-3 space-y-4">
+						{blendshapes.map(([blendshape, morphIndex]) =>
+							item.id === "base" ? (
+								<ValueControl
+									key={blendshape}
+									label={blendshape}
+									initial={mesh.morphTargetInfluences?.[morphIndex] ?? 0}
+									onChange={(value) =>
+										engine?.setMorph(mesh.name, blendshape, value)
+									}
+								/>
+							) : (
+								<div
+									key={blendshape}
+									className="flex justify-between gap-2 text-[11px]"
+								>
+									<span className="min-w-0 truncate" title={blendshape}>
+										{blendshape}
+									</span>
+									<span className="text-muted-foreground tabular-nums">
+										{(mesh.morphTargetInfluences?.[morphIndex] ?? 0).toFixed(2)}
+									</span>
+								</div>
+							),
+						)}
+					</div>
+				</details>
+			) : (
+				<p className="border-t pt-2 text-[11px] text-muted-foreground">
+					{t.noBlendshapes}
+				</p>
+			)}
+		</div>
+	);
+}
+
 export function Inspector({
 	engine,
 	item,
@@ -107,7 +291,17 @@ export function Inspector({
 				{t.none}
 			</p>
 		);
-	const warnings = [...view.warnings, ...(item.result?.warnings ?? [])];
+	const warnings = [
+		...view.warnings,
+		...item.warnings,
+		...(item.result?.warnings ?? []),
+	];
+	const lilToonWarnings = warnings.filter(
+		(warning) => warning.code === "LILTOON",
+	);
+	const compositionWarnings = warnings.filter(
+		(warning) => warning.code !== "LILTOON",
+	);
 	const controls = item.asset.manifest?.controls ?? [];
 	return (
 		<div className="space-y-5 p-4">
@@ -194,29 +388,31 @@ export function Inspector({
 					<p className="text-xs text-muted-foreground">{t.emptyControls}</p>
 				)}
 			</section>
-			{item.id === "base" && (
-				<>
-					<Separator />
-					<section className="space-y-4">
-						<h3 className="text-xs font-medium">{t.morphs}</h3>
-						<p className="text-[11px] leading-relaxed text-muted-foreground">
-							{t.fitHint}
-						</p>
-						{item.asset.meshes.flatMap((mesh) =>
-							Object.entries(mesh.morphTargetDictionary ?? {}).map(
-								([name, index]) => (
-									<ValueControl
-										key={`${item.id}-${mesh.uuid}-${index}`}
-										label={`${mesh.name} · ${name}`}
-										initial={mesh.morphTargetInfluences?.[index] ?? 0}
-										onChange={(v) => engine?.setMorph(mesh.name, name, v)}
-									/>
-								),
-							),
-						)}
-					</section>
-				</>
-			)}
+			<Separator />
+			<section className="space-y-3">
+				<h3 className="text-xs font-medium">{t.meshes}</h3>
+				{item.asset.meshes.map((mesh, index) => (
+					<MeshCard
+						key={mesh.uuid}
+						engine={engine}
+						item={item}
+						mesh={mesh}
+						index={index}
+						t={t}
+					/>
+				))}
+			</section>
+			<Separator />
+			<details className="group" data-section="bones">
+				<summary className="flex cursor-pointer list-none items-center gap-2 text-xs font-medium marker:hidden">
+					<CaretRightIcon className="transition-transform group-open:rotate-90" />
+					<span className="flex-1">{t.boneHierarchy}</span>
+					<Badge variant="outline">{item.asset.bones.length}</Badge>
+				</summary>
+				<div className="mt-3 rounded-md border bg-muted/20 p-3">
+					<BoneTree bones={item.asset.bones} />
+				</div>
+			</details>
 			{item.id === "base" && item.asset.vrm && (
 				<>
 					<Separator />
@@ -226,8 +422,8 @@ export function Inspector({
 							<ValueControl
 								key={`${item.asset.scene.uuid}-${expression.expressionName}`}
 								label={expression.expressionName}
-								onChange={(v) =>
-									engine?.setExpression(expression.expressionName, v)
+								onChange={(value) =>
+									engine?.setExpression(expression.expressionName, value)
 								}
 							/>
 						))}
@@ -241,31 +437,17 @@ export function Inspector({
 						<WarningCircleIcon size={15} />
 					) : (
 						<CheckCircleIcon size={15} />
-					)}{" "}
+					)}
 					{warnings.length ? `${t.review} (${warnings.length})` : t.noWarnings}
 				</h3>
-				{warnings.map((warning, i) => (
-					<div
-						key={`${warning.code}-${i}`}
-						className="space-y-1 rounded-md border bg-muted/40 p-2.5"
-					>
-						<p className="text-[10px] font-medium">
-							{warning.code}
-							{warning.operation ? ` · ${warning.operation}` : ""}
-						</p>
-						<p className="break-words text-[11px] leading-relaxed text-muted-foreground">
-							{warning.message}
-						</p>
-						{warning.query && (
-							<p className="break-words text-[10px] text-muted-foreground">
-								{[
-									...(warning.query.boneKeywords ?? []),
-									...(warning.query.blendshapeKeywords ?? []),
-								].join(", ")}
-							</p>
-						)}
-					</div>
-				))}
+				<WarningAccordion
+					title={t.lilToonWarnings}
+					warnings={lilToonWarnings}
+				/>
+				<WarningAccordion
+					title={t.compositionWarnings}
+					warnings={compositionWarnings}
+				/>
 			</section>
 		</div>
 	);
