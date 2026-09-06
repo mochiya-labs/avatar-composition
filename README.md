@@ -9,7 +9,7 @@ flowchart LR
   Loader --> Session["AvatarCompositionSession<br/>one base + attachments"]
   VRM["three-vrm<br/>standard VRM behavior"] --> Session
   Session --> View["Host scene and animation loop"]
-  LilToon["three-liltoon + optional bridge<br/>material rendering"] --> View
+  LilToon["Any material library<br/>host-owned rendering"] --> View
 ```
 
 ## Avatar or attachment
@@ -106,7 +106,7 @@ npm install /path/to/mochiya-avatar-asset-runtime-0.1.0.tgz three@0.185.1 @pixiv
 
 ## Use in Three.js
 
-The host supplies `scene`, the base animation `mixer` and render loop. Prepare assets before adding render helpers.
+The host supplies `scene`, the base animation `mixer` and render loop. Await loading before preparing assets. The core has no material-library dependency.
 
 ```ts
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
@@ -142,6 +142,14 @@ function update(delta: number) {
 	base.vrm?.update(delta);
 	scene.updateMatrixWorld(true);
 	session.afterVrmUpdate(delta);
+	const updated = new Set(base.vrm?.materials ?? []);
+	for (const material of attachment.vrm?.materials ?? []) {
+		if (!attachment.scene.visible || updated.has(material)) continue;
+		updated.add(material);
+		(
+			material as typeof material & { update?: (delta: number) => void }
+		).update?.(delta);
+	}
 }
 
 function hideAttachment() {
@@ -159,56 +167,36 @@ Controls: `setItemState(id, { controls: { controlId: value } })`, `setBaseContro
 
 Use independent loaded instances per attachment. Detach before disposal; session disposal restores overlays without freeing assets. Changing bases requires a new session and renewed matching.
 
+### Materials and ownership
+
+| Concern                          | Responsibility                                                                                                                                                                 |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Material swaps                   | Core assigns file-local materials and restores the original binding. No shader-specific bridge.                                                                                |
+| glTF primitive                   | Replaces its entire material binding, including loader-expanded arrays; undo restores the original array and geometry groups.                                                  |
+| Procedural meshes                | Swaps only the selected material slot. Pass `authoredObjects` when the scene includes generated helpers.                                                                       |
+| Rendering and material animation | Host and chosen material library. `base.vrm.update()` advances base materials; advance visible attachment materials once in the host loop.                                     |
+| Disposal                         | `prepareAvatarAsset()` captures owned parser resources. Detach before disposal. Procedural assets accept explicit `resources`; omit shared resources managed by another owner. |
+
+The core never inspects shader uniforms or custom texture caches. `disposeAvatarAsset()` releases its resource snapshot once, so later material swaps cannot make it dispose a borrowed material. Procedural default ownership includes geometry, skeletons and materials; declare textures explicitly with `resources` when the asset owns them.
+
 ### Optional lilToon rendering
 
-`three-liltoon` owns material rendering and `MOCHIYA_materials_liltoon`. The optional `/liltoon` bridge handles swaps and VRM material expressions.
-
-| Stage   | Integration                                                                                                                                                                |
-| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Load    | Register `GLTFLilToonExtension` with a `LilToonRendererAdapter`, `addOutlines: false`, `configureShadowCasters: false`.                                                    |
-| Prepare | Create `LilToonCompositionBridge(adapter)`; install `installLilToonExpressionBindings(vrm)` and `bridge.refresh(mesh)`. Pass the bridge as the session's `materialBridge`. |
-| Release | Detach, undo expression bindings, `bridge.release(mesh)`, then dispose the asset; dispose the bridge after the session.                                                    |
-
-Using the imports and `load()` helper above, replace the loader and session setup as follows. `renderer` is your Three.js `WebGLRenderer`.
+Install `three-liltoon` in the **application** and configure it independently. The sample viewer demonstrates this setup; the core works without the material package.
 
 ```ts
-import { GLTFLilToonExtension, LilToonRendererAdapter } from "three-liltoon";
-import {
-	LilToonCompositionBridge,
-	installLilToonExpressionBindings,
-} from "@mochiya/avatar-asset-runtime/liltoon";
+import { enableLilToon } from "three-liltoon";
+import { VRMLoaderPlugin } from "@pixiv/three-vrm";
+import { enableLilToonVRM } from "three-liltoon/vrm";
 
-const adapter = new LilToonRendererAdapter(renderer);
-const bridge = new LilToonCompositionBridge(adapter);
+const releaseRendering = enableLilToon(renderer); // Once per renderer owner.
 const loader = new GLTFLoader()
-	.register(
-		(p) =>
-			new GLTFLilToonExtension(p, {
-				rendererAdapter: adapter,
-				addOutlines: false,
-				configureShadowCasters: false,
-			}),
-	)
-	.register((p) => new VRMLoaderPlugin(p))
+	.register((p) => enableLilToonVRM(new VRMLoaderPlugin(p)))
 	.register((p) => new MochiyaAvatarAssetLoaderPlugin(p));
-
-// Load and prepare both assets with this loader before creating the session.
-const base = await load("/avatar.vrm");
-const attachment = await load("/attachment.vrm");
-const undoExpressions = [base, attachment].flatMap((asset) =>
-	asset.vrm ? [installLilToonExpressionBindings(asset.vrm)] : [],
-);
-for (const asset of [base, attachment]) {
-	for (const mesh of asset.meshes) bridge.refresh(mesh);
-}
-scene.add(base.scene, attachment.scene);
-const session = new AvatarCompositionSession({ base, materialBridge: bridge });
-session.attach(attachment, { id: "coat" });
+// Use this loader with the load(), session and frame loop above.
+// On teardown: dispose the session and assets, then releaseRendering().
 ```
 
-Keep the update loop above. For full cleanup, call `session.dispose()`, each function in `undoExpressions`, and `bridge.dispose()` before disposing both assets.
-
-The [viewer engine](examples/viewer/src/engine.ts) demonstrates setup and cleanup. The bridge expects one material per glTF primitive.
+The material plugin reads only `MOCHIYA_materials_liltoon`; the Mochiya plugin reads only `MOCHIYA_avatar_asset`. The helper enhances the standard VRM plugin with material loading and expression bindings; it also loads ordinary glTF/GLB without requiring VRM data. Outlines and casters follow ordinary material assignments automatically. Omitting lilToon leaves ordinary glTF fallback materials and attachment behavior available. See the [viewer engine](examples/viewer/src/engine.ts) for the complete lifecycle.
 
 ## Contributing
 

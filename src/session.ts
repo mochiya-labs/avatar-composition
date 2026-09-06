@@ -9,10 +9,6 @@ import {
 	type Selector,
 } from "./schema.js";
 
-export interface MaterialBridge {
-	refresh(mesh: Mesh): void;
-	release(mesh: Mesh): void;
-}
 export interface ItemState {
 	id: string;
 	visible?: boolean;
@@ -70,13 +66,10 @@ export class AvatarCompositionSession {
 		string,
 		{ binding: Binding; original: unknown; written: unknown }
 	>();
-	private readonly bridge?: MaterialBridge;
-	private readonly dirtyMeshes = new Set<Mesh>();
 	private readonly baseItem: Item;
 	private disposed = false;
-	constructor(options: { base: AvatarAsset; materialBridge?: MaterialBridge }) {
+	constructor(options: { base: AvatarAsset }) {
 		this.base = options.base;
-		this.bridge = options.materialBridge;
 		if (this.base.manifest?.assetKind === "attachment")
 			throw new CompositionError(
 				"INVALID_ASSET_KIND",
@@ -180,7 +173,6 @@ export class AvatarCompositionSession {
 			item.appliedActions = item.actions.length;
 			this.items.set(item.id, item);
 			owners.set(asset, this);
-			for (const mesh of asset.meshes) this.bridge?.refresh(mesh);
 			this.evaluate();
 			return item;
 		} catch (error) {
@@ -245,10 +237,6 @@ export class AvatarCompositionSession {
 			vrm?.nodeConstraintManager?.update();
 			// Refresh spring sorting after attachment through public manager APIs (see bindRig).
 			vrm?.springBoneManager?.update(delta);
-			for (const material of vrm?.materials ?? [])
-				(material as Material & { update?: (d: number) => void }).update?.(
-					delta,
-				);
 		}
 		this.evaluate("properties");
 	}
@@ -261,15 +249,12 @@ export class AvatarCompositionSession {
 		for (const undo of item.undo.reverse()) undo();
 		item.asset.scene.updateWorldMatrix(true, true);
 		this.refreshSprings(item.asset);
-		for (const mesh of item.asset.meshes) this.bridge?.refresh(mesh);
 		this.evaluate();
 	}
 	dispose(): void {
 		if (this.disposed) return;
 		for (const id of [...this.items.keys()]) this.detach(id);
 		this.restoreLayers();
-		for (const mesh of this.dirtyMeshes) this.bridge?.refresh(mesh);
-		this.dirtyMeshes.clear();
 		owners.delete(this.base);
 		this.disposed = true;
 	}
@@ -577,22 +562,25 @@ export class AvatarCompositionSession {
 			}
 			result.execute = () =>
 				valid.forEach((mesh) => {
+					const wholePrimitive =
+						targetAsset.primitiveSlots.has(mesh) || !(target as Mesh).isMesh;
 					const slot =
 						targetAsset.primitiveSlots.has(mesh) || !(target as Mesh).isMesh
 							? 0
 							: action.slot;
 					const binding: Binding = {
-						key: `${mesh.uuid}:material:${slot}`,
+						key: `${mesh.uuid}:material:${wholePrimitive ? "primitive" : slot}`,
 						get: () =>
-							Array.isArray(mesh.material)
+							!wholePrimitive && Array.isArray(mesh.material)
 								? mesh.material[slot]
 								: mesh.material,
 						set: (value) => {
-							if (Array.isArray(mesh.material)) {
+							if (wholePrimitive)
+								mesh.material = value as Material | Material[];
+							else if (Array.isArray(mesh.material)) {
 								mesh.material = [...mesh.material];
 								mesh.material[slot] = value as Material;
 							} else mesh.material = value as Material;
-							this.dirtyMeshes.add(mesh);
 						},
 					};
 					this.write(binding, material);
@@ -757,7 +745,5 @@ export class AvatarCompositionSession {
 							compiled.execute();
 				}
 		}
-		for (const mesh of this.dirtyMeshes) this.bridge?.refresh(mesh);
-		this.dirtyMeshes.clear();
 	}
 }

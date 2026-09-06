@@ -1,10 +1,10 @@
 import { defineConfig } from "tsup";
 export default defineConfig({
-	entry: ["src/index.ts", "src/liltoon.ts"],
+	entry: ["src/index.ts"],
 	format: ["esm"],
 	dts: true,
 	sourcemap: true,
 	clean: true,
 	target: "es2022",
-	external: ["three", "@pixiv/three-vrm", "three-liltoon"],
+	external: ["three", "@pixiv/three-vrm"],
 });

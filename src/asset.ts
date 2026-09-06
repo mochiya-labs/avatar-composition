@@ -5,6 +5,9 @@ import {
 	SkinnedMesh,
 	type Material,
 	type Bone,
+	type BufferGeometry,
+	type Skeleton,
+	type Texture,
 } from "three";
 import type {
 	GLTF,
@@ -29,7 +32,17 @@ export class MochiyaAvatarAssetLoaderPlugin implements GLTFLoaderPlugin {
 	}
 }
 
+/** Explicit ownership; shared resources can be omitted and disposed by their host. */
+export interface AvatarAssetResources {
+	geometries?: Iterable<BufferGeometry>;
+	skeletons?: Iterable<Skeleton>;
+	materials?: Iterable<Material>;
+	textures?: Iterable<Texture>;
+}
+
 export class AvatarAsset {
+	readonly resources: Set<{ dispose(): void }>;
+	disposed = false;
 	readonly meshes: Mesh[] = [];
 	readonly bones: Bone[] = [];
 	readonly names = new Map<Object3D, string[]>();
@@ -51,6 +64,8 @@ export class AvatarAsset {
 			nodes?: Map<number, Object3D>;
 			materials?: Material[];
 			aliases?: Map<Object3D, string[]>;
+			authoredObjects?: Set<Object3D>;
+			resources?: AvatarAssetResources;
 		} = {},
 	) {
 		this.manifest = options.manifest
@@ -62,7 +77,7 @@ export class AvatarAsset {
 		this.rootRestWorld = scene.matrixWorld.clone();
 		let next = 0;
 		scene.traverse((node) => {
-			if (node.userData.mochiyaGenerated) return;
+			if (options.authoredObjects && !options.authoredObjects.has(node)) return;
 			this.restWorld.set(node, node.matrixWorld.clone());
 			this.names.set(node, [
 				...new Set(
@@ -83,6 +98,19 @@ export class AvatarAsset {
 			}
 			if (!options.nodes) this.nodes.set(next++, node);
 		});
+		const resources = options.resources ?? {
+			geometries: this.meshes.map((m) => m.geometry),
+			skeletons: this.meshes
+				.filter((m): m is SkinnedMesh => !!(m as SkinnedMesh).isSkinnedMesh)
+				.map((m) => m.skeleton),
+			materials: this.materials,
+		};
+		this.resources = new Set([
+			...(resources.geometries ?? []),
+			...(resources.skeletons ?? []),
+			...(resources.materials ?? []),
+			...(resources.textures ?? []),
+		]);
 		if (options.nodes)
 			for (const [index, node] of options.nodes) this.nodes.set(index, node);
 		for (const [index, node] of this.nodes) this.indices.set(node, index);
@@ -127,6 +155,31 @@ export async function prepareAvatarAsset(gltf: GLTF): Promise<AvatarAsset> {
 		aliases.set(node, [parser.json.nodes?.[index]?.name ?? ""]);
 	});
 	const materials = (await parser.getDependencies("material")) as Material[];
+	const textures = new Set<Texture>(await parser.getDependencies("texture"));
+	const authoredObjects = new Set<Object3D>([gltf.scene, ...nodes.values()]);
+	const meshes: Mesh[] = [];
+	gltf.scene.traverse((node) => {
+		const association = parser.associations.get(node) as
+			{ meshes?: number; primitives?: number } | undefined;
+		if ((node as Mesh).isMesh && association?.meshes !== undefined) {
+			meshes.push(node as Mesh);
+			authoredObjects.add(node);
+		}
+	});
+	const ownedMaterials = new Set(materials);
+	for (const mesh of meshes) {
+		for (const material of Array.isArray(mesh.material)
+			? mesh.material
+			: [mesh.material])
+			ownedMaterials.add(material);
+	}
+	// Standard texture slots can contain glTF transform clones. Shader-private
+	// resources remain the owning loader/material library's responsibility.
+	for (const material of ownedMaterials) {
+		for (const value of Object.values(material)) {
+			if ((value as Texture | null)?.isTexture) textures.add(value as Texture);
+		}
+	}
 	const manifest =
 		gltf.userData.mochiyaAvatarAsset ??
 		parser.json.extensions?.[EXTENSION_NAME];
@@ -136,6 +189,15 @@ export async function prepareAvatarAsset(gltf: GLTF): Promise<AvatarAsset> {
 		nodes,
 		aliases,
 		materials,
+		authoredObjects,
+		resources: {
+			geometries: meshes.map((m) => m.geometry),
+			skeletons: meshes
+				.filter((m): m is SkinnedMesh => !!(m as SkinnedMesh).isSkinnedMesh)
+				.map((m) => m.skeleton),
+			materials: ownedMaterials,
+			textures,
+		},
 	});
 	for (const mesh of asset.meshes) {
 		// Three.js records primitive indices here; @types/three currently omits this field.
@@ -149,42 +211,10 @@ export async function prepareAvatarAsset(gltf: GLTF): Promise<AvatarAsset> {
 
 /** Dispose only after detaching this asset from a composition session. */
 export function disposeAvatarAsset(asset: AvatarAsset): void {
-	const geometries = new Set(asset.meshes.map((mesh) => mesh.geometry));
-	const skeletons = new Set(
-		asset.meshes
-			.filter((m): m is SkinnedMesh => (m as SkinnedMesh).isSkinnedMesh)
-			.map((m) => m.skeleton),
-	);
-	const materials = new Set<Material>(asset.materials);
-	for (const mesh of asset.meshes)
-		for (const m of Array.isArray(mesh.material)
-			? mesh.material
-			: [mesh.material])
-			materials.add(m);
-	const textures = new Set<{ dispose(): void }>();
-	for (const m of materials) {
-		for (const v of Object.values(m))
-			if (
-				v &&
-				typeof v === "object" &&
-				(v as { isTexture?: boolean }).isTexture
-			)
-				textures.add(v as { dispose(): void });
-		for (const v of Object.values(
-			(m as Material & { lilToonTextures?: Record<string, unknown> })
-				.lilToonTextures ?? {},
-		))
-			if (
-				v &&
-				typeof v === "object" &&
-				(v as { isTexture?: boolean }).isTexture
-			)
-				textures.add(v as { dispose(): void });
-	}
+	if (asset.disposed) return;
+	asset.disposed = true;
 	asset.scene.removeFromParent();
 	asset.vrm?.springBoneManager?.reset();
-	geometries.forEach((g) => g.dispose());
-	skeletons.forEach((s) => s.dispose());
-	materials.forEach((m) => m.dispose());
-	textures.forEach((t) => t.dispose());
+	asset.resources.forEach((resource) => resource.dispose());
+	asset.resources.clear();
 }

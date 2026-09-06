@@ -24,6 +24,7 @@ export function assetFixture(
 	name: string,
 	kind: "avatar" | "attachment",
 	edit?: (manifest: AvatarAssetManifest) => void,
+	options: { lilToonExpressions?: boolean } = {},
 ) {
 	const meshName = kind === "avatar" ? "Body" : "Attachment";
 	const manifest = parseManifest({
@@ -145,6 +146,11 @@ export function assetFixture(
 		attributes: {
 			POSITION: accessor(positions, 3, "VEC3", true),
 			NORMAL: accessor(normals, 3, "VEC3"),
+			TEXCOORD_0: accessor(
+				new Float32Array(geometry.attributes.uv.array),
+				2,
+				"VEC2",
+			),
 			JOINTS_0: accessor(new Uint16Array(count * 4), 4, "VEC4"),
 			WEIGHTS_0: accessor(weights, 4, "VEC4"),
 		},
@@ -184,7 +190,29 @@ export function assetFixture(
 					bones.map(([bone], node) => [bone, { node }]),
 				),
 			},
-			expressions: { preset: {} },
+			expressions: {
+				preset: options.lilToonExpressions
+					? {
+							happy: {
+								materialColorBinds: [
+									{
+										material: 0,
+										type: "color",
+										targetValue: [0.8, 0.2, 0.4, 0.5],
+									},
+									{
+										material: 0,
+										type: "outlineColor",
+										targetValue: [0.2, 0.8, 0.4, 1],
+									},
+								],
+								textureTransformBinds: [
+									{ material: 0, scale: [2, 3], offset: [0.2, 0.4] },
+								],
+							},
+						}
+					: {},
+			},
 		};
 	const gltf = {
 		asset: { version: "2.0", generator: "Mochiya browser tests" },
@@ -211,6 +239,21 @@ export function assetFixture(
 		skins: [skin],
 		materials: [
 			{
+				extensions: options.lilToonExpressions
+					? {
+							MOCHIYA_materials_liltoon: {
+								specVersion: "1.0",
+								renderMode: "opaque",
+								properties: {
+									_Color: [0.4, 0.5, 0.6, 1],
+									_OutlineColor: [0, 0, 0, 1],
+									_MainTex_ST: [1, 1, 0, 0],
+									_OutlineWidth: 0.03,
+									_UseOutline: 1,
+								},
+							},
+						}
+					: undefined,
 				pbrMetallicRoughness: {
 					baseColorFactor: [0.4, 0.5, 0.6, 1],
 					metallicFactor: 0,
@@ -218,7 +261,10 @@ export function assetFixture(
 				},
 			},
 		],
-		extensionsUsed: Object.keys(extensions),
+		extensionsUsed: [
+			...Object.keys(extensions),
+			...(options.lilToonExpressions ? ["MOCHIYA_materials_liltoon"] : []),
+		],
 		extensions,
 		buffers: [{ byteLength }],
 		bufferViews,

@@ -39,6 +39,187 @@ function weight(page: Page) {
 	);
 }
 
+test("the enhanced VRM loader renders lilToon GLB with tangents and no VRM runtime", async ({
+	page,
+}) => {
+	const errors: string[] = [];
+	page.on("pageerror", (error) => errors.push(error.message));
+	await page.goto("/");
+	await expect(
+		page.getByRole("button", { name: "Load avatar", exact: true }).first(),
+	).toBeEnabled();
+	await page.getByLabel("Base avatar file", { exact: true }).setInputFiles(
+		assetFixture("liltoon.glb", "avatar", undefined, {
+			lilToonExpressions: true,
+		}),
+	);
+	await expect(
+		page.getByRole("button", { name: "liltoon.glb Current base" }),
+	).toBeVisible();
+	await page.evaluate(() => {
+		const mesh = Reflect.get(window, "mochiyaViewer").getSnapshot().base.asset
+			.meshes[0];
+		mesh.onAfterRender = () => {
+			mesh.userData.drewOutline = mesh.children.some(
+				(child: { material?: { pass?: string } }) =>
+					child.material?.pass === "outline",
+			);
+		};
+	});
+	await expect
+		.poll(() =>
+			page.evaluate(() => {
+				const asset = Reflect.get(window, "mochiyaViewer").getSnapshot().base
+					.asset;
+				const mesh = asset.meshes[0];
+				return {
+					vrm: Boolean(asset.vrm),
+					lilToon: mesh.material.isLilToonMaterial,
+					tangents: mesh.geometry.getAttribute("tangent")?.count > 0,
+					outline: mesh.userData.drewOutline,
+				};
+			}),
+		)
+		.toEqual({ vrm: false, lilToon: true, tangents: true, outline: true });
+	expect(errors).toEqual([]);
+});
+
+test("lilToon material expressions load automatically on avatars and attachments", async ({
+	page,
+}) => {
+	const errors: string[] = [];
+	page.on("pageerror", (error) => errors.push(error.message));
+	await page.goto("/");
+	await expect(
+		page.getByRole("button", { name: "Load avatar", exact: true }).first(),
+	).toBeEnabled();
+	await page.getByLabel("Base avatar file", { exact: true }).setInputFiles(
+		assetFixture("liltoon.vrm", "avatar", undefined, {
+			lilToonExpressions: true,
+		}),
+	);
+	await expect(
+		page.getByRole("button", { name: "liltoon.vrm Current base" }),
+	).toBeVisible();
+	await page.getByLabel("Attachment file", { exact: true }).setInputFiles(
+		assetFixture("liltoon-attachment.vrm", "attachment", undefined, {
+			lilToonExpressions: true,
+		}),
+	);
+	await expect(
+		page.getByRole("button", { name: "liltoon-attachment.vrm Attached" }),
+	).toBeVisible();
+	for (const value of [1, 0]) {
+		await page.evaluate((value) => {
+			const state = Reflect.get(window, "mochiyaViewer").getSnapshot();
+			for (const item of [state.base, ...state.attachments]) {
+				item.asset.vrm.expressionManager.setValue("happy", value);
+				const mesh = item.asset.meshes[0];
+				mesh.onAfterRender = () => {
+					const outline = mesh.children.find(
+						(child: { material?: { pass?: string } }) =>
+							child.material?.pass === "outline",
+					);
+					mesh.userData.observedOutline =
+						outline?.material.lilToonProperties._OutlineColor;
+				};
+			}
+		}, value);
+		await expect
+			.poll(() =>
+				page.evaluate(() => {
+					const state = Reflect.get(window, "mochiyaViewer").getSnapshot();
+					return [state.base, ...state.attachments].map((item) => {
+						const mesh = item.asset.meshes[0];
+						const material = mesh.material;
+						const rounded = (array: number[]) =>
+							array.map((v) => Number(v.toFixed(5)));
+						return {
+							color: rounded(material.lilToonProperties._Color),
+							uv: rounded(material.lilToonProperties._MainTex_ST),
+							outline: rounded(mesh.userData.observedOutline ?? []),
+						};
+					});
+				}),
+			)
+			.toEqual(
+				[0, 1].map(() => ({
+					color: value ? [0.8, 0.2, 0.4, 0.5] : [0.4, 0.5, 0.6, 1],
+					uv: value ? [2, 3, 0.2, 0.4] : [1, 1, 0, 0],
+					outline: value ? [0.2, 0.8, 0.4, 1] : [0, 0, 0, 1],
+				})),
+			);
+	}
+	await page
+		.getByRole("button", { name: "Remove liltoon-attachment.vrm" })
+		.click();
+	await loadBase(page);
+	expect(errors).toEqual([]);
+});
+
+test("material swaps and undo update lilToon rendering without a composition bridge", async ({
+	page,
+}) => {
+	const errors: string[] = [];
+	page.on("pageerror", (error) => errors.push(error.message));
+	await page.goto("/");
+	await expect(
+		page.getByRole("button", { name: "Load avatar", exact: true }).first(),
+	).toBeEnabled();
+	await page.getByLabel("Base avatar file", { exact: true }).setInputFiles(
+		assetFixture("toon.vrm", "avatar", undefined, {
+			lilToonExpressions: true,
+		}),
+	);
+	await expect(
+		page.getByRole("button", { name: "toon.vrm Current base" }),
+	).toBeVisible();
+	await page.evaluate(() => {
+		const mesh = Reflect.get(window, "mochiyaViewer").getSnapshot().base.asset
+			.meshes[0];
+		mesh.onAfterRender = () => {
+			mesh.userData.outlineDraw = mesh.children.some(
+				(n: { material?: { pass?: string } }) => n.material?.pass === "outline",
+			);
+		};
+	});
+	const outlined = () =>
+		page.evaluate(
+			() =>
+				Reflect.get(window, "mochiyaViewer").getSnapshot().base.asset.meshes[0]
+					.userData.outlineDraw,
+		);
+	await expect.poll(outlined).toBe(true);
+	const replacement = assetFixture("material.glb", "attachment", (manifest) => {
+		manifest.requiredCapabilities.push("material.swap");
+		manifest.actions.push({
+			id: "replace",
+			sourceOrder: 1,
+			type: "material.swap",
+			target: { asset: "base", meshKeywords: ["Body"] },
+			slot: 0,
+			material: 0,
+		});
+	});
+	await page
+		.getByLabel("Attachment file", { exact: true })
+		.setInputFiles(replacement);
+	await expect(
+		page.getByRole("button", { name: "material.glb Attached" }),
+	).toBeVisible();
+	await expect.poll(outlined).toBe(false);
+	await page.getByRole("button", { name: "Remove material.glb" }).click();
+	await expect.poll(outlined).toBe(true);
+	expect(
+		await page.evaluate(
+			() =>
+				Reflect.get(window, "mochiyaViewer").getSnapshot().base.asset.meshes[0]
+					.children.length,
+		),
+	).toBe(0);
+	expect(errors).toEqual([]);
+});
+
 test("empty viewer has persistent panels and no demo or stage settings", async ({
 	page,
 }) => {

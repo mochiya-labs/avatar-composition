@@ -6,7 +6,7 @@ import {
 	createVRMAnimationClip,
 	type VRMAnimation,
 } from "@pixiv/three-vrm-animation";
-import { GLTFLilToonExtension, LilToonRendererAdapter } from "three-liltoon";
+import { enableLilToon } from "three-liltoon";
 import {
 	AvatarAsset,
 	AvatarCompositionSession,
@@ -17,9 +17,9 @@ import {
 	type CompositionWarning,
 } from "@mochiya/avatar-asset-runtime";
 import {
-	LilToonCompositionBridge,
-	installLilToonExpressionBindings,
-} from "@mochiya/avatar-asset-runtime/liltoon";
+	enableLilToonVRM,
+	uninstallLilToonExpressionBindings,
+} from "three-liltoon/vrm";
 
 export interface ViewerItem {
 	id: string;
@@ -48,9 +48,7 @@ export class ViewerEngine {
 		paused: false,
 	};
 	private session?: AvatarCompositionSession;
-	private readonly bridge: LilToonCompositionBridge;
-	private readonly adapter: LilToonRendererAdapter;
-	private readonly expressionUndo = new Map<AvatarAsset, () => void>();
+	private readonly releaseRendering: () => void;
 	private mixer?: AnimationMixer;
 	private vrma?: VRMAnimation;
 	private generation = 0;
@@ -60,8 +58,7 @@ export class ViewerEngine {
 		private readonly scene: Scene,
 		renderer: WebGLRenderer,
 	) {
-		this.adapter = new LilToonRendererAdapter(renderer);
-		this.bridge = new LilToonCompositionBridge(this.adapter);
+		this.releaseRendering = enableLilToon(renderer);
 	}
 	subscribe = (fn: () => void) => {
 		this.listeners.add(fn);
@@ -90,18 +87,14 @@ export class ViewerEngine {
 	}
 	private loader(warnings: CompositionWarning[]) {
 		return new GLTFLoader()
-			.register(
-				(parser) =>
-					new GLTFLilToonExtension(parser, {
-						rendererAdapter: this.adapter,
-						addOutlines: false,
-						configureShadowCasters: false,
+			.register((parser) =>
+				enableLilToonVRM(
+					new VRMLoaderPlugin(parser, { autoUpdateHumanBones: true }),
+					{
 						onWarning: (w) =>
 							warnings.push({ code: "LILTOON", message: w.message }),
-					}),
-			)
-			.register(
-				(parser) => new VRMLoaderPlugin(parser, { autoUpdateHumanBones: true }),
+					},
+				),
 			)
 			.register((parser) => new MochiyaAvatarAssetLoaderPlugin(parser));
 	}
@@ -121,22 +114,14 @@ export class ViewerEngine {
 		return asset;
 	}
 	private prepare(asset: AvatarAsset) {
-		if (asset.vrm)
-			this.expressionUndo.set(
-				asset,
-				installLilToonExpressionBindings(asset.vrm),
-			);
 		for (const mesh of asset.meshes) {
 			mesh.castShadow = true;
 			mesh.receiveShadow = true;
-			this.bridge.refresh(mesh);
 		}
 		this.scene.add(asset.scene);
 	}
 	private release(asset: AvatarAsset) {
-		this.expressionUndo.get(asset)?.();
-		this.expressionUndo.delete(asset);
-		asset.meshes.forEach((mesh) => this.bridge.release(mesh));
+		if (asset.vrm) uninstallLilToonExpressionBindings(asset.vrm);
 		disposeAvatarAsset(asset);
 	}
 	async loadBase(file: File) {
@@ -177,7 +162,6 @@ export class ViewerEngine {
 		try {
 			nextSession = new AvatarCompositionSession({
 				base: asset,
-				materialBridge: this.bridge,
 			});
 		} catch (error) {
 			disposeAvatarAsset(asset);
@@ -329,6 +313,19 @@ export class ViewerEngine {
 		base.vrm?.update(dt);
 		this.scene.updateMatrixWorld(true);
 		this.session.afterVrmUpdate(dt);
+		// Base materials are advanced by vrm.update. Attachment humanoids stay
+		// inactive; their material animation belongs to this viewer.
+		const updated = new Set(base.vrm?.materials ?? []);
+		for (const item of this.snapshot.attachments) {
+			if (!item.visible) continue;
+			for (const material of item.asset.vrm?.materials ?? []) {
+				if (updated.has(material)) continue;
+				updated.add(material);
+				(
+					material as typeof material & { update?: (delta: number) => void }
+				).update?.(dt);
+			}
+		}
 	}
 	private clear() {
 		++this.generation;
@@ -343,7 +340,7 @@ export class ViewerEngine {
 		this.disposed = true;
 		++this.request;
 		this.clear();
-		this.bridge.dispose();
+		this.releaseRendering();
 		this.listeners.clear();
 	}
 }

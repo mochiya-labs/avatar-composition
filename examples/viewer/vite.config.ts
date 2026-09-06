@@ -8,9 +8,6 @@ export default defineConfig({
 	resolve: {
 		alias: {
 			"@": fileURLToPath(new URL("./src", import.meta.url)),
-			"@mochiya/avatar-asset-runtime/liltoon": fileURLToPath(
-				new URL("../../src/liltoon.ts", import.meta.url),
-			),
 			"@mochiya/avatar-asset-runtime": fileURLToPath(
 				new URL("../../src/index.ts", import.meta.url),
 			),
