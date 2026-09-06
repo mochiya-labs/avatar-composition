@@ -1,7 +1,7 @@
 {
-	"name": "@mochiya/avatar-asset-runtime",
+	"name": "@mochiya/avatar-composition",
 	"version": "0.1.0",
-	"description": "Avatar attachment overlays for Three.js and the MOCHIYA_avatar_asset glTF extension",
+	"description": "Avatar and attachment composition for Three.js and the MOCHIYA_avatar_composition glTF extension",
 	"type": "module",
 	"license": "MIT",
 	"author": {
@@ -17,7 +17,7 @@
 			"types": "./dist/index.d.ts",
 			"import": "./dist/index.js"
 		},
-		"./schema": "./schema/MOCHIYA_avatar_asset.schema.json"
+		"./schema": "./schema/MOCHIYA_avatar_composition.schema.json"
 	},
 	"files": [
 		"dist",
@@ -43,8 +43,8 @@
 		"build": "tsup && node scripts/generate-schema.mjs",
 		"typecheck": "tsc --noEmit",
 		"test": "vitest run",
-		"viewer:dev": "npm run dev --workspace @mochiya/avatar-asset-viewer",
-		"viewer:build": "npm run build --workspace @mochiya/avatar-asset-viewer",
+		"viewer:dev": "npm run dev --workspace @mochiya/avatar-composition-viewer",
+		"viewer:build": "npm run build --workspace @mochiya/avatar-composition-viewer",
 		"test:browser": "playwright test"
 	},
 	"engines": {

@@ -1,6 +1,6 @@
-# Mochiya Avatar Asset Runtime
+# Mochiya Avatar Composition
 
-Overlay clothing, hair and other **attachments** on a base avatar in Three.js, with reversible rig binding, fit settings and controls. This package is the maintenance home of the **`MOCHIYA_avatar_asset` glTF extension**, its schema and runtime behavior.
+Compose a base avatar with clothing, hair and other **attachments** in Three.js, with reversible rig binding, fit settings and controls. This package is the maintenance home of the **`MOCHIYA_avatar_composition` glTF extension**, its schema and runtime behavior.
 
 ```mermaid
 flowchart LR
@@ -25,7 +25,7 @@ Both converted kinds carry the extension when exported through Mochiya. Conversi
 
 ## Extension capabilities
 
-`MOCHIYA_avatar_asset` **0.1** adds attachment relationships and portable actions to glTF/VRM. It lives at the document root, listed in `extensionsUsed`; unaware viewers display the model without these overlays. Geometry, skinning and standard VRM expressions/physics remain in their ordinary formats.
+`MOCHIYA_avatar_composition` **0.1** adds attachment relationships and portable actions to glTF/VRM. It lives at the document root, listed in `extensionsUsed`; unaware viewers display the model without these overlays. Geometry, skinning and standard VRM expressions/physics remain in their ordinary formats.
 
 | Capability       | Extension data          | Behavior and limit                                                                                                               |
 | ---------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
@@ -56,9 +56,9 @@ Example root-extension fragment: apply a body fit blendshape while the attachmen
 
 ```json
 {
-	"extensionsUsed": ["MOCHIYA_avatar_asset"],
+	"extensionsUsed": ["MOCHIYA_avatar_composition"],
 	"extensions": {
-		"MOCHIYA_avatar_asset": {
+		"MOCHIYA_avatar_composition": {
 			"specVersion": "0.1",
 			"assetKind": "attachment",
 			"requiredCapabilities": ["morph.override"],
@@ -79,7 +79,7 @@ Example root-extension fragment: apply a body fit blendshape while the attachmen
 }
 ```
 
-Contract: [JSON Schema](schema/MOCHIYA_avatar_asset.schema.json) (exported as `@mochiya/avatar-asset-runtime/schema`) and [TypeScript schema](src/schema.ts). Author only current values; `parseManifest()` additionally normalizes legacy `outfit`/`accessory` and `outfitReference` without modifying input.
+Contract: [JSON Schema](schema/MOCHIYA_avatar_composition.schema.json) (exported as `@mochiya/avatar-composition/schema`) and [TypeScript schema](src/schema.ts). Author only current values; `parseManifest()` additionally normalizes legacy `outfit`/`accessory` and `outfitReference` without modifying input.
 
 ## Install and try
 
@@ -101,7 +101,7 @@ The viewer starts empty, with Assets, Preview and Inspector always available. Pa
 Install the tarball in your application with these example peer versions:
 
 ```sh
-npm install /path/to/mochiya-avatar-asset-runtime-0.1.0.tgz three@0.185.1 @pixiv/three-vrm@3.5.5
+npm install /path/to/mochiya-avatar-composition-0.1.0.tgz three@0.185.1 @pixiv/three-vrm@3.5.5
 ```
 
 ## Use in Three.js
@@ -112,15 +112,15 @@ The host supplies `scene`, the base animation `mixer` and render loop. Await loa
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { VRMLoaderPlugin, VRMUtils } from "@pixiv/three-vrm";
 import {
-	MochiyaAvatarAssetLoaderPlugin,
+	MochiyaAvatarCompositionLoaderPlugin,
 	prepareAvatarAsset,
 	AvatarCompositionSession,
 	disposeAvatarAsset,
-} from "@mochiya/avatar-asset-runtime";
+} from "@mochiya/avatar-composition";
 
 const loader = new GLTFLoader()
 	.register((p) => new VRMLoaderPlugin(p))
-	.register((p) => new MochiyaAvatarAssetLoaderPlugin(p));
+	.register((p) => new MochiyaAvatarCompositionLoaderPlugin(p));
 
 async function load(url: string) {
 	const gltf = await loader.loadAsync(url);
@@ -191,12 +191,12 @@ import { enableLilToonVRM } from "three-liltoon/vrm";
 const releaseRendering = enableLilToon(renderer); // Once per renderer owner.
 const loader = new GLTFLoader()
 	.register((p) => enableLilToonVRM(new VRMLoaderPlugin(p)))
-	.register((p) => new MochiyaAvatarAssetLoaderPlugin(p));
+	.register((p) => new MochiyaAvatarCompositionLoaderPlugin(p));
 // Use this loader with the load(), session and frame loop above.
 // On teardown: dispose the session and assets, then releaseRendering().
 ```
 
-The material plugin reads only `MOCHIYA_materials_liltoon`; the Mochiya plugin reads only `MOCHIYA_avatar_asset`. The helper enhances the standard VRM plugin with material loading and expression bindings; it also loads ordinary glTF/GLB without requiring VRM data. Outlines and casters follow ordinary material assignments automatically. Omitting lilToon leaves ordinary glTF fallback materials and attachment behavior available. See the [viewer engine](examples/viewer/src/engine.ts) for the complete lifecycle.
+The material plugin reads only `MOCHIYA_materials_liltoon`; the Mochiya plugin reads only `MOCHIYA_avatar_composition`. The helper enhances the standard VRM plugin with material loading and expression bindings; it also loads ordinary glTF/GLB without requiring VRM data. Outlines and casters follow ordinary material assignments automatically. Omitting lilToon leaves ordinary glTF fallback materials and attachment behavior available. See the [viewer engine](examples/viewer/src/engine.ts) for the complete lifecycle.
 
 ## Contributing
 

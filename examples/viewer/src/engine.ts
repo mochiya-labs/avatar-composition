@@ -18,12 +18,12 @@ import { enableLilToon } from "three-liltoon";
 import {
 	AvatarAsset,
 	AvatarCompositionSession,
-	MochiyaAvatarAssetLoaderPlugin,
+	MochiyaAvatarCompositionLoaderPlugin,
 	disposeAvatarAsset,
 	prepareAvatarAsset,
 	type Attachment,
 	type CompositionWarning,
-} from "@mochiya/avatar-asset-runtime";
+} from "@mochiya/avatar-composition";
 import {
 	enableLilToonVRM,
 	uninstallLilToonExpressionBindings,
@@ -138,7 +138,7 @@ export class ViewerEngine {
 					},
 				),
 			)
-			.register((parser) => new MochiyaAvatarAssetLoaderPlugin(parser));
+			.register((parser) => new MochiyaAvatarCompositionLoaderPlugin(parser));
 	}
 	private async load(
 		file: File,

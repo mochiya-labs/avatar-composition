@@ -18,17 +18,17 @@ import type { VRM } from "@pixiv/three-vrm";
 import {
 	EXTENSION_NAME,
 	parseManifest,
-	type AvatarAssetManifest,
+	type AvatarCompositionManifest,
 	type ManifestInput,
 } from "./schema.js";
 
-export class MochiyaAvatarAssetLoaderPlugin implements GLTFLoaderPlugin {
+export class MochiyaAvatarCompositionLoaderPlugin implements GLTFLoaderPlugin {
 	readonly name = EXTENSION_NAME;
 	constructor(readonly parser: GLTFParser) {}
 	async afterRoot(gltf: GLTF): Promise<void> {
 		const value = this.parser.json.extensions?.[EXTENSION_NAME];
 		// Parsing only. No attachment, materials or hierarchy mutation during loader hooks.
-		if (value) gltf.userData.mochiyaAvatarAsset = parseManifest(value);
+		if (value) gltf.userData.mochiyaAvatarComposition = parseManifest(value);
 	}
 }
 
@@ -54,7 +54,7 @@ export class AvatarAsset {
 	readonly authoredActive = new Map<Object3D, boolean>();
 	readonly authoredParents = new Map<Object3D, Object3D | null>();
 	readonly rootRestWorld: Matrix4;
-	readonly manifest?: AvatarAssetManifest;
+	readonly manifest?: AvatarCompositionManifest;
 	readonly vrm?: VRM;
 	constructor(
 		readonly scene: Object3D,
@@ -181,7 +181,7 @@ export async function prepareAvatarAsset(gltf: GLTF): Promise<AvatarAsset> {
 		}
 	}
 	const manifest =
-		gltf.userData.mochiyaAvatarAsset ??
+		gltf.userData.mochiyaAvatarComposition ??
 		parser.json.extensions?.[EXTENSION_NAME];
 	const asset = new AvatarAsset(gltf.scene, {
 		vrm: gltf.userData.vrm as VRM | undefined,

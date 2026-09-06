@@ -1,7 +1,7 @@
 {
-  "$ref": "#/definitions/MOCHIYA_avatar_asset",
+  "$ref": "#/definitions/MOCHIYA_avatar_composition",
   "definitions": {
-    "MOCHIYA_avatar_asset": {
+    "MOCHIYA_avatar_composition": {
       "type": "object",
       "properties": {
         "specVersion": {
@@ -84,29 +84,29 @@
                         ]
                       },
                       "node": {
-                        "$ref": "#/definitions/MOCHIYA_avatar_asset/properties/rig/properties/jointMappings/items/properties/sourceNode"
+                        "$ref": "#/definitions/MOCHIYA_avatar_composition/properties/rig/properties/jointMappings/items/properties/sourceNode"
                       },
                       "boneKeywords": {
-                        "$ref": "#/definitions/MOCHIYA_avatar_asset/properties/matching/properties/armatureKeywords"
+                        "$ref": "#/definitions/MOCHIYA_avatar_composition/properties/matching/properties/armatureKeywords"
                       },
                       "meshKeywords": {
-                        "$ref": "#/definitions/MOCHIYA_avatar_asset/properties/matching/properties/armatureKeywords"
+                        "$ref": "#/definitions/MOCHIYA_avatar_composition/properties/matching/properties/armatureKeywords"
                       },
                       "nodeKeywords": {
-                        "$ref": "#/definitions/MOCHIYA_avatar_asset/properties/matching/properties/armatureKeywords"
+                        "$ref": "#/definitions/MOCHIYA_avatar_composition/properties/matching/properties/armatureKeywords"
                       },
                       "blendshapeKeywords": {
-                        "$ref": "#/definitions/MOCHIYA_avatar_asset/properties/matching/properties/armatureKeywords"
+                        "$ref": "#/definitions/MOCHIYA_avatar_composition/properties/matching/properties/armatureKeywords"
                       },
                       "morphIndex": {
-                        "$ref": "#/definitions/MOCHIYA_avatar_asset/properties/rig/properties/jointMappings/items/properties/sourceNode"
+                        "$ref": "#/definitions/MOCHIYA_avatar_composition/properties/rig/properties/jointMappings/items/properties/sourceNode"
                       },
                       "humanBone": {
                         "type": "string",
                         "maxLength": 64
                       },
                       "parentKeywords": {
-                        "$ref": "#/definitions/MOCHIYA_avatar_asset/properties/matching/properties/armatureKeywords"
+                        "$ref": "#/definitions/MOCHIYA_avatar_composition/properties/matching/properties/armatureKeywords"
                       }
                     },
                     "required": [
@@ -130,10 +130,10 @@
                 "type": "object",
                 "properties": {
                   "sourceNode": {
-                    "$ref": "#/definitions/MOCHIYA_avatar_asset/properties/rig/properties/jointMappings/items/properties/sourceNode"
+                    "$ref": "#/definitions/MOCHIYA_avatar_composition/properties/rig/properties/jointMappings/items/properties/sourceNode"
                   },
                   "target": {
-                    "$ref": "#/definitions/MOCHIYA_avatar_asset/properties/rig/properties/jointMappings/items/properties/target"
+                    "$ref": "#/definitions/MOCHIYA_avatar_composition/properties/rig/properties/jointMappings/items/properties/target"
                   },
                   "mode": {
                     "type": "string",
@@ -184,10 +184,10 @@
                 ]
               },
               "min": {
-                "$ref": "#/definitions/MOCHIYA_avatar_asset/properties/controls/items/properties/defaultValue/anyOf/0"
+                "$ref": "#/definitions/MOCHIYA_avatar_composition/properties/controls/items/properties/defaultValue/anyOf/0"
               },
               "max": {
-                "$ref": "#/definitions/MOCHIYA_avatar_asset/properties/controls/items/properties/defaultValue/anyOf/0"
+                "$ref": "#/definitions/MOCHIYA_avatar_composition/properties/controls/items/properties/defaultValue/anyOf/0"
               }
             },
             "required": [
@@ -206,10 +206,10 @@
             "type": "object",
             "properties": {
               "node": {
-                "$ref": "#/definitions/MOCHIYA_avatar_asset/properties/rig/properties/jointMappings/items/properties/sourceNode"
+                "$ref": "#/definitions/MOCHIYA_avatar_composition/properties/rig/properties/jointMappings/items/properties/sourceNode"
               },
               "aliases": {
-                "$ref": "#/definitions/MOCHIYA_avatar_asset/properties/matching/properties/armatureKeywords",
+                "$ref": "#/definitions/MOCHIYA_avatar_composition/properties/matching/properties/armatureKeywords",
                 "default": []
               },
               "active": {
@@ -255,10 +255,10 @@
                         ]
                       },
                       "node": {
-                        "$ref": "#/definitions/MOCHIYA_avatar_asset/properties/rig/properties/jointMappings/items/properties/sourceNode"
+                        "$ref": "#/definitions/MOCHIYA_avatar_composition/properties/rig/properties/jointMappings/items/properties/sourceNode"
                       },
                       "nodeKeywords": {
-                        "$ref": "#/definitions/MOCHIYA_avatar_asset/properties/matching/properties/armatureKeywords"
+                        "$ref": "#/definitions/MOCHIYA_avatar_composition/properties/matching/properties/armatureKeywords"
                       },
                       "control": {
                         "type": "string",
@@ -267,7 +267,7 @@
                       "value": {
                         "anyOf": [
                           {
-                            "$ref": "#/definitions/MOCHIYA_avatar_asset/properties/controls/items/properties/defaultValue/anyOf/0"
+                            "$ref": "#/definitions/MOCHIYA_avatar_composition/properties/controls/items/properties/defaultValue/anyOf/0"
                           },
                           {
                             "type": "boolean"
@@ -284,7 +284,7 @@
                     "additionalProperties": false
                   },
                   "sourceOrder": {
-                    "$ref": "#/definitions/MOCHIYA_avatar_asset/properties/controls/items/properties/defaultValue/anyOf/0",
+                    "$ref": "#/definitions/MOCHIYA_avatar_composition/properties/controls/items/properties/defaultValue/anyOf/0",
                     "default": 0
                   },
                   "type": {
@@ -292,10 +292,10 @@
                     "const": "morph.sync"
                   },
                   "driver": {
-                    "$ref": "#/definitions/MOCHIYA_avatar_asset/properties/rig/properties/jointMappings/items/properties/target"
+                    "$ref": "#/definitions/MOCHIYA_avatar_composition/properties/rig/properties/jointMappings/items/properties/target"
                   },
                   "driven": {
-                    "$ref": "#/definitions/MOCHIYA_avatar_asset/properties/rig/properties/jointMappings/items/properties/target"
+                    "$ref": "#/definitions/MOCHIYA_avatar_composition/properties/rig/properties/jointMappings/items/properties/target"
                   },
                   "curve": {
                     "type": "object",
@@ -315,10 +315,10 @@
                           "maxItems": 2,
                           "items": [
                             {
-                              "$ref": "#/definitions/MOCHIYA_avatar_asset/properties/controls/items/properties/defaultValue/anyOf/0"
+                              "$ref": "#/definitions/MOCHIYA_avatar_composition/properties/controls/items/properties/defaultValue/anyOf/0"
                             },
                             {
-                              "$ref": "#/definitions/MOCHIYA_avatar_asset/properties/controls/items/properties/defaultValue/anyOf/0"
+                              "$ref": "#/definitions/MOCHIYA_avatar_composition/properties/controls/items/properties/defaultValue/anyOf/0"
                             }
                           ]
                         },
@@ -345,23 +345,23 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "$ref": "#/definitions/MOCHIYA_avatar_asset/properties/actions/items/anyOf/0/properties/id"
+                    "$ref": "#/definitions/MOCHIYA_avatar_composition/properties/actions/items/anyOf/0/properties/id"
                   },
                   "condition": {
-                    "$ref": "#/definitions/MOCHIYA_avatar_asset/properties/actions/items/anyOf/0/properties/condition"
+                    "$ref": "#/definitions/MOCHIYA_avatar_composition/properties/actions/items/anyOf/0/properties/condition"
                   },
                   "sourceOrder": {
-                    "$ref": "#/definitions/MOCHIYA_avatar_asset/properties/actions/items/anyOf/0/properties/sourceOrder"
+                    "$ref": "#/definitions/MOCHIYA_avatar_composition/properties/actions/items/anyOf/0/properties/sourceOrder"
                   },
                   "type": {
                     "type": "string",
                     "const": "morph.override"
                   },
                   "target": {
-                    "$ref": "#/definitions/MOCHIYA_avatar_asset/properties/rig/properties/jointMappings/items/properties/target"
+                    "$ref": "#/definitions/MOCHIYA_avatar_composition/properties/rig/properties/jointMappings/items/properties/target"
                   },
                   "value": {
-                    "$ref": "#/definitions/MOCHIYA_avatar_asset/properties/controls/items/properties/defaultValue/anyOf/0"
+                    "$ref": "#/definitions/MOCHIYA_avatar_composition/properties/controls/items/properties/defaultValue/anyOf/0"
                   }
                 },
                 "required": [
@@ -376,20 +376,20 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "$ref": "#/definitions/MOCHIYA_avatar_asset/properties/actions/items/anyOf/0/properties/id"
+                    "$ref": "#/definitions/MOCHIYA_avatar_composition/properties/actions/items/anyOf/0/properties/id"
                   },
                   "condition": {
-                    "$ref": "#/definitions/MOCHIYA_avatar_asset/properties/actions/items/anyOf/0/properties/condition"
+                    "$ref": "#/definitions/MOCHIYA_avatar_composition/properties/actions/items/anyOf/0/properties/condition"
                   },
                   "sourceOrder": {
-                    "$ref": "#/definitions/MOCHIYA_avatar_asset/properties/actions/items/anyOf/0/properties/sourceOrder"
+                    "$ref": "#/definitions/MOCHIYA_avatar_composition/properties/actions/items/anyOf/0/properties/sourceOrder"
                   },
                   "type": {
                     "type": "string",
                     "const": "node.active"
                   },
                   "target": {
-                    "$ref": "#/definitions/MOCHIYA_avatar_asset/properties/rig/properties/jointMappings/items/properties/target"
+                    "$ref": "#/definitions/MOCHIYA_avatar_composition/properties/rig/properties/jointMappings/items/properties/target"
                   },
                   "value": {
                     "type": "boolean"
@@ -407,26 +407,26 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "$ref": "#/definitions/MOCHIYA_avatar_asset/properties/actions/items/anyOf/0/properties/id"
+                    "$ref": "#/definitions/MOCHIYA_avatar_composition/properties/actions/items/anyOf/0/properties/id"
                   },
                   "condition": {
-                    "$ref": "#/definitions/MOCHIYA_avatar_asset/properties/actions/items/anyOf/0/properties/condition"
+                    "$ref": "#/definitions/MOCHIYA_avatar_composition/properties/actions/items/anyOf/0/properties/condition"
                   },
                   "sourceOrder": {
-                    "$ref": "#/definitions/MOCHIYA_avatar_asset/properties/actions/items/anyOf/0/properties/sourceOrder"
+                    "$ref": "#/definitions/MOCHIYA_avatar_composition/properties/actions/items/anyOf/0/properties/sourceOrder"
                   },
                   "type": {
                     "type": "string",
                     "const": "material.swap"
                   },
                   "target": {
-                    "$ref": "#/definitions/MOCHIYA_avatar_asset/properties/rig/properties/jointMappings/items/properties/target"
+                    "$ref": "#/definitions/MOCHIYA_avatar_composition/properties/rig/properties/jointMappings/items/properties/target"
                   },
                   "slot": {
-                    "$ref": "#/definitions/MOCHIYA_avatar_asset/properties/rig/properties/jointMappings/items/properties/sourceNode"
+                    "$ref": "#/definitions/MOCHIYA_avatar_composition/properties/rig/properties/jointMappings/items/properties/sourceNode"
                   },
                   "material": {
-                    "$ref": "#/definitions/MOCHIYA_avatar_asset/properties/rig/properties/jointMappings/items/properties/sourceNode"
+                    "$ref": "#/definitions/MOCHIYA_avatar_composition/properties/rig/properties/jointMappings/items/properties/sourceNode"
                   }
                 },
                 "required": [
@@ -442,23 +442,23 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "$ref": "#/definitions/MOCHIYA_avatar_asset/properties/actions/items/anyOf/0/properties/id"
+                    "$ref": "#/definitions/MOCHIYA_avatar_composition/properties/actions/items/anyOf/0/properties/id"
                   },
                   "condition": {
-                    "$ref": "#/definitions/MOCHIYA_avatar_asset/properties/actions/items/anyOf/0/properties/condition"
+                    "$ref": "#/definitions/MOCHIYA_avatar_composition/properties/actions/items/anyOf/0/properties/condition"
                   },
                   "sourceOrder": {
-                    "$ref": "#/definitions/MOCHIYA_avatar_asset/properties/actions/items/anyOf/0/properties/sourceOrder"
+                    "$ref": "#/definitions/MOCHIYA_avatar_composition/properties/actions/items/anyOf/0/properties/sourceOrder"
                   },
                   "type": {
                     "type": "string",
                     "const": "collider.link"
                   },
                   "target": {
-                    "$ref": "#/definitions/MOCHIYA_avatar_asset/properties/rig/properties/jointMappings/items/properties/target"
+                    "$ref": "#/definitions/MOCHIYA_avatar_composition/properties/rig/properties/jointMappings/items/properties/target"
                   },
                   "collider": {
-                    "$ref": "#/definitions/MOCHIYA_avatar_asset/properties/rig/properties/jointMappings/items/properties/target"
+                    "$ref": "#/definitions/MOCHIYA_avatar_composition/properties/rig/properties/jointMappings/items/properties/target"
                   }
                 },
                 "required": [

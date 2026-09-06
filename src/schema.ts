@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const EXTENSION_NAME = "MOCHIYA_avatar_asset";
+export const EXTENSION_NAME = "MOCHIYA_avatar_composition";
 export const SPEC_VERSION = "0.1";
 export const ASSET_KINDS = ["avatar", "attachment"] as const;
 export type AssetKind = (typeof ASSET_KINDS)[number];
@@ -219,7 +219,7 @@ export const manifestSchema = z
 		actions: z.array(actionSchema).max(10000).default([]),
 	})
 	.strict();
-export type AvatarAssetManifest = z.infer<typeof manifestSchema>;
+export type AvatarCompositionManifest = z.infer<typeof manifestSchema>;
 export type ManifestInput = z.input<typeof manifestSchema>;
 export class CompositionError extends Error {
 	constructor(
@@ -245,7 +245,7 @@ function normalizeLegacyManifest(input: unknown): unknown {
 	return normalized;
 }
 /** Parse current or legacy file data without modifying the supplied record. */
-export function parseManifest(input: unknown): AvatarAssetManifest {
+export function parseManifest(input: unknown): AvatarCompositionManifest {
 	const result = manifestSchema.safeParse(normalizeLegacyManifest(input));
 	if (!result.success)
 		throw new CompositionError(

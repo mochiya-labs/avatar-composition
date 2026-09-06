@@ -1,5 +1,5 @@
 {
-	"name": "@mochiya/avatar-asset-viewer",
+	"name": "@mochiya/avatar-composition-viewer",
 	"version": "0.1.0",
 	"private": true,
 	"type": "module",
@@ -9,7 +9,7 @@
 		"preview": "vite preview --host 127.0.0.1 --port 5175"
 	},
 	"dependencies": {
-		"@mochiya/avatar-asset-runtime": "file:../..",
+		"@mochiya/avatar-composition": "file:../..",
 		"@pixiv/three-vrm": "^3.5.5",
 		"three": "^0.185.1",
 		"three-liltoon": "file:../../../three-liltoon",

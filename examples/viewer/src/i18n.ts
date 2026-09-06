@@ -52,7 +52,7 @@ export const messages = {
 		debugVisualizersHint:
 			"Shows available humanoid, look-at, constraint, spring joint, and collider helpers for this VRM.",
 		error: "Asset could not be loaded",
-		technical: "Avatar asset runtime · VRM + lilToon",
+		technical: "Avatar Composition · VRM + lilToon",
 		position: "Placement follows matching bones",
 		current: "Current base",
 		optional: "Optional",
@@ -111,7 +111,7 @@ export const messages = {
 		debugVisualizersHint:
 			"このVRMで利用できるヒューマノイド、視線、コンストレイント、スプリングジョイント、コライダーのヘルパーを表示します。",
 		error: "読み込みに失敗しました",
-		technical: "Avatar asset runtime · VRM + lilToon",
+		technical: "Avatar Composition · VRM + lilToon",
 		position: "一致するボーンに追従",
 		current: "現在のベース",
 		optional: "任意",

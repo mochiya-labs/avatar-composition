@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { zodToJsonSchema } from "zod-to-json-schema";
-import publishedSchema from "../schema/MOCHIYA_avatar_asset.schema.json";
+import publishedSchema from "../schema/MOCHIYA_avatar_composition.schema.json";
 import { EXTENSION_NAME, manifestSchema, parseManifest } from "../src/index.js";
 
 describe("extension authoring contract", () => {
@@ -12,7 +12,7 @@ describe("extension authoring contract", () => {
 			}),
 		);
 		const properties =
-			publishedSchema.definitions.MOCHIYA_avatar_asset.properties;
+			publishedSchema.definitions.MOCHIYA_avatar_composition.properties;
 		expect(properties.assetKind.enum).toEqual(["avatar", "attachment"]);
 		expect(properties.rig.properties.role.enum).toEqual([
 			"avatar",

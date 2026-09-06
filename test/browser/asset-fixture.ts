@@ -1,5 +1,8 @@
 import { BoxGeometry, Matrix4, Vector3 } from "three";
-import { parseManifest, type AvatarAssetManifest } from "../../src/schema";
+import {
+	parseManifest,
+	type AvatarCompositionManifest,
+} from "../../src/schema";
 
 // Browser-test inputs only: no model files are read, written or bundled with the viewer.
 const bones: [string, number, [number, number, number]][] = [
@@ -23,7 +26,7 @@ const bones: [string, number, [number, number, number]][] = [
 export function assetFixture(
 	name: string,
 	kind: "avatar" | "attachment",
-	edit?: (manifest: AvatarAssetManifest) => void,
+	edit?: (manifest: AvatarCompositionManifest) => void,
 	options: { lilToonExpressions?: boolean; springBones?: boolean } = {},
 ) {
 	const meshName = kind === "avatar" ? "Body" : "Attachment";
@@ -175,7 +178,7 @@ export function assetFixture(
 	geometry.dispose();
 
 	const extensions: Record<string, unknown> = {
-		MOCHIYA_avatar_asset: manifest,
+		MOCHIYA_avatar_composition: manifest,
 	};
 	if (name.endsWith(".vrm"))
 		extensions.VRMC_vrm = {

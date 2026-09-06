@@ -6,7 +6,7 @@ import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import type { ViewerEngine, ViewerItem, ViewerSnapshot } from "./engine";
 import type { Labels } from "./i18n";
-import type { AvatarAssetManifest } from "@mochiya/avatar-asset-runtime";
+import type { AvatarCompositionManifest } from "@mochiya/avatar-composition";
 
 export function ValueControl({
 	label,
@@ -51,7 +51,7 @@ function AssetControl({
 	item,
 	engine,
 }: {
-	control: AvatarAssetManifest["controls"][number];
+	control: AvatarCompositionManifest["controls"][number];
 	item: ViewerItem;
 	engine?: ViewerEngine;
 }) {

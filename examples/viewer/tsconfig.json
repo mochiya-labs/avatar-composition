@@ -14,7 +14,7 @@
 		"paths": {
 			"@pixiv/three-vrm": ["../../node_modules/@pixiv/three-vrm"],
 			"@/*": ["src/*"],
-			"@mochiya/avatar-asset-runtime": ["../../src/index.ts"]
+			"@mochiya/avatar-composition": ["../../src/index.ts"]
 		}
 	},
 	"include": ["src", "vite.config.ts"]
