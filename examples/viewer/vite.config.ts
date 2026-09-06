@@ -17,7 +17,7 @@ export default defineConfig({
 			"react",
 			"react-dom",
 			"@pixiv/three-vrm",
-			"three-liltoon",
+			"@mochiya/three-liltoon",
 		],
 	},
 	build: { sourcemap: true },

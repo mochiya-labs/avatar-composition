@@ -14,7 +14,7 @@ import {
 	createVRMAnimationClip,
 	type VRMAnimation,
 } from "@pixiv/three-vrm-animation";
-import { enableLilToon } from "three-liltoon";
+import { enableLilToon } from "@mochiya/three-liltoon";
 import {
 	AvatarAsset,
 	AvatarCompositionSession,
@@ -27,7 +27,7 @@ import {
 import {
 	enableLilToonVRM,
 	uninstallLilToonExpressionBindings,
-} from "three-liltoon/vrm";
+} from "@mochiya/three-liltoon/vrm";
 
 export interface ViewerItem {
 	id: string;

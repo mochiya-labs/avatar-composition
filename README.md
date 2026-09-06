@@ -83,7 +83,7 @@ Contract: [JSON Schema](schema/MOCHIYA_avatar_composition.schema.json) (exported
 
 ## Install and try
 
-Use Node.js 20.19+ and a built sibling `three-liltoon/` checkout for the viewer:
+Use Node.js 20.19+ for the viewer. A normal install uses the published `@mochiya/three-liltoon` package:
 
 ```sh
 cd avatar-asset-runtime
@@ -93,6 +93,16 @@ npm run viewer:dev
 # Optional: package the library for installation in another application.
 npm pack
 ```
+
+To test unpublished changes from a sibling `three-liltoon/` checkout, build that package and apply a local install without changing the committed manifest or lockfile:
+
+```sh
+npm --prefix ../three-liltoon run build:package
+npm run viewer:use-local-liltoon
+npm run viewer:dev
+```
+
+Run `npm install` again to restore the published dependency recorded in the lockfile. Clean npm and Vercel installs always use the registry package.
 
 Open Vite's URL (normally `http://127.0.0.1:5175`). **Load avatar**, then **Add attachment** using your VRM/GLB files. Select an asset to inspect its controls and matching results; hide or remove attachments to undo their effects. For any selected VRM, **Show debug visualizers** displays its available humanoid, look-at, constraint, spring-joint and collider helpers. This setting is independent for each asset and starts off. Optional base animations use VRMA files. All files stay in the browser.
 
@@ -181,12 +191,12 @@ The core never inspects shader uniforms or custom texture caches. `disposeAvatar
 
 ### Optional lilToon rendering
 
-Install `three-liltoon` in the **application** and configure it independently. The sample viewer demonstrates this setup; the core works without the material package.
+Install `@mochiya/three-liltoon` in the **application** and configure it independently. The sample viewer demonstrates this setup; the core works without the material package.
 
 ```ts
-import { enableLilToon } from "three-liltoon";
+import { enableLilToon } from "@mochiya/three-liltoon";
 import { VRMLoaderPlugin } from "@pixiv/three-vrm";
-import { enableLilToonVRM } from "three-liltoon/vrm";
+import { enableLilToonVRM } from "@mochiya/three-liltoon/vrm";
 
 const releaseRendering = enableLilToon(renderer); // Once per renderer owner.
 const loader = new GLTFLoader()
