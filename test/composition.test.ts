@@ -75,6 +75,10 @@ function override(value: number, id = "fit") {
 }
 it("keeps grouped Shape Changer entries and reversibly falls back from Delete to zero", () => {
 	const base = fixture();
+	// A normal-only morph still has a weight, but cannot select vertices for deletion.
+	base.mesh.geometry.morphAttributes.normal =
+		base.mesh.geometry.morphAttributes.position;
+	delete base.mesh.geometry.morphAttributes.position;
 	base.mesh.morphTargetInfluences![0] = 0.7;
 	const attachment = fixture("Hips", {
 		...header,

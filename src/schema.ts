@@ -133,6 +133,7 @@ export const componentSchema = z.discriminatedUnion("type", [
 		.object({
 			...common,
 			type: z.literal("shapeChanger"),
+			threshold: number.nonnegative().default(0.01),
 			condition: conditionSchema.optional(),
 			shapes: z
 				.array(

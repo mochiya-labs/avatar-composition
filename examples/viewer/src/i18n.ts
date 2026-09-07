@@ -67,6 +67,8 @@ export const messages = {
 		loading: "Loading",
 		compositionExtension: "Avatar Composition extension",
 		resolvedOperations: "Resolved operations",
+		deletionResult: "Delete: selected vertices / removed triangles",
+		deletionInactive: "Delete inactive",
 		skipped: "Skipped",
 		baseInstructionHint:
 			"Base component instructions; external rig merging is not applied.",
@@ -168,6 +170,8 @@ export const messages = {
 		loading: "読み込み中",
 		compositionExtension: "Avatar Composition 拡張",
 		resolvedOperations: "解決された操作",
+		deletionResult: "削除：対象頂点数 / 削除三角形数",
+		deletionInactive: "削除は無効",
 		skipped: "スキップ",
 		baseInstructionHint:
 			"ベースのコンポーネント設定。外部リグの統合は実行しません。",

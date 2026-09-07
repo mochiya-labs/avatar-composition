@@ -272,6 +272,11 @@
                     "type": "string",
                     "const": "shapeChanger"
                   },
+                  "threshold": {
+                    "type": "number",
+                    "minimum": 0,
+                    "default": 0.01
+                  },
                   "condition": {
                     "type": "object",
                     "properties": {

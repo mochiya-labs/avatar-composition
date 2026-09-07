@@ -11,6 +11,7 @@ import {
 } from "./schema.js";
 
 import { operations, type Operation as Action } from "./operations.js";
+import { ShapeDeletion, type DeleteTarget } from "./deletion.js";
 import { bindArmatures, type ResolvedOperation } from "./rig.js";
 export type { ResolvedOperation } from "./rig.js";
 
@@ -40,6 +41,9 @@ type Compiled = {
 	writes: string[];
 	conditionReads: string[];
 	targets: string[];
+	morphTargets?: { mesh: Mesh; index: number }[];
+	deletions?: DeleteTarget[];
+	diagnostic?: ResolvedOperation;
 };
 type Item = Attachment & {
 	state: ItemState;
@@ -75,6 +79,7 @@ export class AvatarCompositionSession {
 	>();
 	private readonly baseItem: Item;
 	private disposed = false;
+	private readonly deletion = new ShapeDeletion();
 	constructor(options: { base: AvatarAsset }) {
 		this.base = options.base;
 		if (this.base.manifest?.assetKind === "attachment")
@@ -108,6 +113,7 @@ export class AvatarCompositionSession {
 			this.evaluate();
 		} catch (error) {
 			this.restoreLayers();
+			this.deletion.dispose();
 			owners.delete(this.base);
 			throw error;
 		}
@@ -262,6 +268,7 @@ export class AvatarCompositionSession {
 		if (this.disposed) return;
 		for (const id of [...this.items.keys()]) this.detach(id);
 		this.restoreLayers();
+		this.deletion.dispose();
 		owners.delete(this.base);
 		this.disposed = true;
 	}
@@ -318,16 +325,6 @@ export class AvatarCompositionSession {
 						"INVALID_LOCAL_REFERENCE",
 						`Missing component source ${component.sourceNode}`,
 					);
-				if (component.type === "shapeChanger")
-					component.shapes.forEach((shape, i) => {
-						if (shape.changeType === "delete")
-							item.warnings.push({
-								code: "SHAPE_DELETE_FALLBACK",
-								operation: component.id,
-								query: shape.target,
-								message: `Delete entry ${i} uses blendshape weight 0; geometry is not deleted.`,
-							});
-					});
 				if (
 					item === this.baseItem &&
 					(component.type === "mergeArmature" || component.type === "boneProxy")
@@ -338,13 +335,14 @@ export class AvatarCompositionSession {
 						message:
 							"Avatar armatures remain separate; base-to-attachment following is applied only when attaching an asset.",
 					});
-					item.resolved.push({
+					const diagnostic: ResolvedOperation = {
 						componentId: component.id,
 						operation: "bone",
 						sourceNode: component.sourceNode,
 						status: "skipped",
 						query: component.target,
-					});
+					};
+					item.resolved.push(diagnostic);
 				}
 				if (
 					component.type === "menuItem" &&
@@ -359,13 +357,15 @@ export class AvatarCompositionSession {
 					});
 				return operations(component, order).flatMap((action) => {
 					const compiled = this.compile(item, action);
-					item.resolved.push({
+					const diagnostic: ResolvedOperation = {
 						componentId: component.id,
 						operation: action.id,
 						status: compiled ? "resolved" : "skipped",
 						target: compiled?.targets.join(", "),
 						query: action.type === "morph.sync" ? action.driven : action.target,
-					});
+					};
+					item.resolved.push(diagnostic);
+					if (compiled) compiled.diagnostic = diagnostic;
 					return compiled ?? [];
 				});
 			},
@@ -503,7 +503,11 @@ export class AvatarCompositionSession {
 				result.conditionReads.push(this.visibleBinding(node).key);
 			}
 		}
-		if (action.type === "morph.sync" || action.type === "morph.override") {
+		if (
+			action.type === "morph.sync" ||
+			action.type === "morph.override" ||
+			action.type === "geometry.delete"
+		) {
 			const targets = this.take(
 				item,
 				item.resolver.morph(
@@ -513,12 +517,41 @@ export class AvatarCompositionSession {
 			);
 			if (!targets) return;
 			const bindings = targets.map((t) => this.morphBinding(t.mesh, t.index));
+			result.morphTargets = targets;
 			result.targets = targets.map(
 				({ mesh, index }) =>
 					`${mesh.name}:${Object.keys(mesh.morphTargetDictionary ?? {}).find((name) => mesh.morphTargetDictionary![name] === index) ?? index}`,
 			);
 			result.writes = bindings.map((b) => b.key);
-			if (action.type === "morph.override")
+			if (action.type === "geometry.delete") {
+				result.writes = bindings.map((b) => `${b.key}:delete`);
+				result.deletions = targets.map(({ mesh, index }, i) => {
+					const reasons = new Set<string>();
+					return {
+						mesh,
+						index,
+						threshold: action.threshold,
+						diagnostic: {
+							active: false,
+							selectedVertices: 0,
+							removedTriangles: 0,
+						},
+						fallback: (reason: string) => {
+							if (!reasons.has(reason)) {
+								reasons.add(reason);
+								item.warnings.push({
+									code: "SHAPE_DELETE_FALLBACK",
+									operation: action.id,
+									query: action.target,
+									message: `${mesh.name}: ${reason} Delete uses reversible blendshape weight 0.`,
+								});
+								if (item.status === "attached") item.status = "partial";
+							}
+							this.write(bindings[i], 0);
+						},
+					};
+				});
+			} else if (action.type === "morph.override")
 				result.execute = () =>
 					bindings.forEach((b) => this.write(b, action.value));
 			else {
@@ -717,7 +750,50 @@ export class AvatarCompositionSession {
 							compiled.execute();
 		}
 		if (phase !== "visibility") {
-			for (const type of ["morph.override", "morph.sync"])
+			const key = (r: { mesh: Mesh; index: number }) =>
+				`${r.mesh.uuid}/${r.index}`;
+			const registered = items.flatMap((item) =>
+				item.actions.flatMap((a) => a.deletions ?? []),
+			);
+			const thresholds = new Map<string, number>();
+			for (const r of registered)
+				thresholds.set(
+					key(r),
+					Math.min(thresholds.get(key(r)) ?? Infinity, r.threshold),
+				);
+			const active = new Map<string, DeleteTarget>();
+			for (const item of items) {
+				if (item.state.visible === false) continue;
+				for (const compiled of [...item.actions].sort(
+					(a, b) => a.action.sourceOrder - b.action.sourceOrder,
+				)) {
+					if (!compiled.condition()) continue;
+					if (compiled.action.type === "morph.override") {
+						compiled.execute();
+						for (const r of compiled.morphTargets ?? []) active.delete(key(r));
+					} else if (compiled.action.type === "geometry.delete") {
+						for (const r of compiled.deletions ?? [])
+							active.set(key(r), { ...r, threshold: thresholds.get(key(r))! });
+					}
+				}
+			}
+			this.deletion.apply([...active.values()], registered);
+			for (const item of items)
+				for (const compiled of item.actions) {
+					if (!compiled.deletions || !compiled.diagnostic) continue;
+					const stats = compiled.deletions.map((r) => r.diagnostic);
+					compiled.diagnostic.deletion = {
+						active: stats.some((s) => s.active),
+						selectedVertices: stats.reduce((n, s) => n + s.selectedVertices, 0),
+						removedTriangles: stats.reduce((n, s) => n + s.removedTriangles, 0),
+						fallback:
+							stats
+								.map((s) => s.fallback)
+								.filter(Boolean)
+								.join("; ") || undefined,
+					};
+				}
+			for (const type of ["morph.sync"])
 				for (const item of items) {
 					if (item.state.visible === false) continue;
 					for (const compiled of [...item.actions].sort(

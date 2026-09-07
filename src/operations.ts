@@ -20,6 +20,7 @@ export type Operation = Common &
 				curve?: RemapCurve;
 		  }
 		| { type: "morph.override"; target: Selector; value: number }
+		| { type: "geometry.delete"; target: Selector; threshold: number }
 		| { type: "node.active"; target: Selector; value: boolean }
 		| {
 				type: "material.swap";
@@ -42,9 +43,10 @@ export function operations(
 			return component.shapes.map((s, i) => ({
 				...common,
 				id: `${component.id}/${i}`,
-				type: "morph.override",
 				target: s.target,
-				value: s.changeType === "delete" ? 0 : s.value,
+				...(s.changeType === "delete"
+					? { type: "geometry.delete" as const, threshold: component.threshold }
+					: { type: "morph.override" as const, value: s.value }),
 			}));
 		case "blendshapeSync":
 			return component.bindings.map((b, i) => ({

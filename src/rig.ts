@@ -14,6 +14,12 @@ export interface ResolvedOperation {
 	target?: string;
 	status: "resolved" | "skipped";
 	query?: Selector;
+	deletion?: {
+		active: boolean;
+		selectedVertices: number;
+		removedTriangles: number;
+		fallback?: string;
+	};
 }
 export function bindArmatures(
 	base: AvatarAsset,

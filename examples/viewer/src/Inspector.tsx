@@ -505,6 +505,14 @@ function ComponentDebug({
 								? localNodeLabel(item, r.sourceNode)
 								: r.operation}{" "}
 							→ {r.target || "—"}
+							{r.deletion && (
+								<div className="text-muted-foreground" data-deletion-result>
+									{r.deletion.active
+										? `${t.deletionResult}: ${r.deletion.selectedVertices} / ${r.deletion.removedTriangles}`
+										: t.deletionInactive}
+									{r.deletion.fallback && <div>{r.deletion.fallback}</div>}
+								</div>
+							)}
 						</div>
 					))}
 				</div>

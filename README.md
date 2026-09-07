@@ -31,7 +31,7 @@ Both converted kinds carry the extension when exported through Mochiya. Conversi
 | ---------------- | ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `mergeArmature`  | **MA Merge Armature**; generated parent reference rig      | Store roots, prefix/suffix and settings; discover matching bones at attachment time. Unidirectional following with retained skins/rest offsets. Other lock modes warn and use that direction. |
 | `boneProxy`      | **MA Bone Proxy**; generated external VRC collider anchors | Follow a base target with Keep World Pose or At Root. Partial-pose/scale modes warn and keep world pose.                                                                                      |
-| `shapeChanger`   | **MA Shape Changer**                                       | Grouped Set/Delete entries. Delete warns and uses reversible weight **0**, without cutting geometry.                                                                                          |
+| `shapeChanger`   | **MA Shape Changer**                                       | Set blendshape weights or reversibly remove triangles affected by a blendshape. Preserves MA's distance threshold (default `0.01`).                                                           |
 | `blendshapeSync` | **MA Blendshape Sync**                                     | Grouped driver/driven references and linear remap points. No sync chains/cycles.                                                                                                              |
 | `objectToggle`   | **MA Object Toggle**                                       | Grouped Boolean visibility changes with logical ancestor conditions. No visibility cycles.                                                                                                    |
 | `materialSetter` | **MA Material Setter**                                     | Grouped slot replacements using file-local materials; shader-independent.                                                                                                                     |
@@ -40,6 +40,8 @@ Both converted kinds carry the extension when exported through Mochiya. Conversi
 Unity conversion preserves component boundaries and separate armatures. Generated reference rigs/collider anchors are labeled by `origin`. The runtime follows external base targets without collapsing skeletons; local merge requests remain unapplied with warnings. Each VRM owns its springs and colliders; cross-asset collider linking is outside the extension.
 
 ### Data and matching
+
+Delete uses the loaded base mesh's position deltas and restores polygons when disabled or detached. It keeps vertex buffers and morph weights intact. Missing geometry uses weight `0` with a warning; multi-frame Unity shapes and scale baking can affect parity. See the [deletion rules](specification/README.md#shape-changer-deletion) for thresholds and precedence.
 
 | Data                            | Purpose                                                                                    |
 | ------------------------------- | ------------------------------------------------------------------------------------------ |
@@ -202,7 +204,7 @@ Run `npm run format` after code changes and `npm run format:check` before submit
 
 Browser tests generate minimal VRM/GLB inputs in memory. The optional Unity integration test reads the companion exporter's Editor-test outputs from `MOCHIYA_UNITY_FIXTURES` (or `test/unity-project/MochiyaTests`); run Unity first, then the browser suite. Model binaries remain outside Git and the package.
 
-Update `specification/README.md` and `src/schema.ts`, regenerate the JSON Schema with `build`, and align exporter mappings. Geometry cutting, arbitrary MA/VRC controllers and automatic body-shape adaptation are outside this package's scope.
+Update `specification/README.md` and `src/schema.ts`, regenerate the JSON Schema with `build`, and align exporter mappings. General mesh cutters, arbitrary MA/VRC controllers and automatic body-shape adaptation are outside this package's scope.
 
 ```sh
 npm run build
