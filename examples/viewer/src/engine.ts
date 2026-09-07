@@ -23,6 +23,7 @@ import {
 	prepareAvatarAsset,
 	type Attachment,
 	type CompositionWarning,
+	type ResolvedOperation,
 } from "@mochiya/avatar-composition";
 import {
 	enableLilToonVRM,
@@ -40,6 +41,7 @@ export interface ViewerItem {
 	debugVisualizersVisible: boolean;
 	controls: Record<string, number | boolean>;
 	result?: Attachment;
+	resolved: readonly ResolvedOperation[];
 }
 export interface ViewerDebugVisualizers {
 	root: Group;
@@ -256,6 +258,7 @@ export class ViewerEngine {
 				debugVisualizers,
 				debugVisualizersVisible: false,
 				controls: {},
+				resolved: nextSession.resolved,
 			},
 			attachments: [],
 			selected: "base",
@@ -291,6 +294,7 @@ export class ViewerEngine {
 						debugVisualizersVisible: false,
 						controls: {},
 						result,
+						resolved: result.resolved,
 					},
 				],
 				selected: id,
@@ -382,6 +386,12 @@ export class ViewerEngine {
 			});
 	}
 	setControl(id: string, control: string, value: number | boolean) {
+		if (
+			id === "base"
+				? !this.snapshot.base
+				: !this.snapshot.attachments.some((item) => item.id === id)
+		)
+			return;
 		if (id === "base") this.session?.setBaseControl(control, value);
 		else this.session?.setItemState(id, { controls: { [control]: value } });
 		if (id === "base" && this.snapshot.base)

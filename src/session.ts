@@ -1,13 +1,18 @@
-import { Bone, Matrix4, Mesh, Object3D, type Material } from "three";
+import { Mesh, Object3D, type Material } from "three";
 import { AvatarAsset } from "./asset.js";
 import { NameResolver, type Match } from "./matching.js";
 import {
 	CompositionError,
-	type Action,
+	menuItems,
+	type RemapCurve,
 	type Condition,
 	type CompositionWarning,
 	type Selector,
 } from "./schema.js";
+
+import { operations, type Operation as Action } from "./operations.js";
+import { bindArmatures, type ResolvedOperation } from "./rig.js";
+export type { ResolvedOperation } from "./rig.js";
 
 export interface ItemState {
 	id: string;
@@ -24,6 +29,7 @@ export interface Attachment {
 	matchedBones: number;
 	requestedBones: number;
 	appliedActions: number;
+	resolved: ResolvedOperation[];
 }
 type Binding = { key: string; get(): unknown; set(value: unknown): void };
 type Compiled = {
@@ -33,6 +39,7 @@ type Compiled = {
 	reads: string[];
 	writes: string[];
 	conditionReads: string[];
+	targets: string[];
 };
 type Item = Attachment & {
 	state: ItemState;
@@ -43,7 +50,7 @@ type Item = Attachment & {
 const owners = new WeakMap<AvatarAsset, AvatarCompositionSession>();
 
 export function evaluateCurve(
-	curve: Extract<Action, { type: "morph.sync" }>["curve"],
+	curve: RemapCurve | undefined,
 	value: number,
 ): number {
 	if (!curve) return value;
@@ -92,10 +99,9 @@ export class AvatarCompositionSession {
 			matchedBones: 0,
 			requestedBones: 0,
 			appliedActions: 0,
+			resolved: [],
 		};
-		this.baseItem.actions = (this.base.manifest?.actions ?? []).flatMap(
-			(action) => this.compile(this.baseItem, action) ?? [],
-		);
+		this.baseItem.actions = this.compileComponents(this.baseItem);
 		this.checkGraph([this.baseItem]);
 		owners.set(this.base, this);
 		try {
@@ -108,6 +114,9 @@ export class AvatarCompositionSession {
 	}
 	get warnings(): readonly CompositionWarning[] {
 		return this.baseItem.warnings;
+	}
+	get resolved(): readonly ResolvedOperation[] {
+		return this.baseItem.resolved;
 	}
 	get attachments(): readonly Attachment[] {
 		return [...this.items.values()];
@@ -142,12 +151,10 @@ export class AvatarCompositionSession {
 			matchedBones: 0,
 			requestedBones: 0,
 			appliedActions: 0,
+			resolved: [],
 		};
 		try {
-			for (const action of asset.manifest?.actions ?? []) {
-				const compiled = this.compile(item, action);
-				if (compiled) item.actions.push(compiled);
-			}
+			item.actions = this.compileComponents(item);
 			this.checkGraph([this.baseItem, ...this.items.values(), item]);
 			for (const other of this.items.values())
 				for (const action of item.actions)
@@ -292,100 +299,77 @@ export class AvatarCompositionSession {
 		return match.value;
 	}
 	private bindRig(item: Item): void {
-		const asset = item.asset;
-		const explicit = asset.manifest?.rig?.jointMappings ?? [];
-		const roots = asset.manifest?.rig?.attachmentRoots ?? [];
-		const mappings = explicit.length
-			? explicit
-			: asset.bones
-					.map((bone) => ({
-						sourceNode: asset.indices.get(bone)!,
-						target: {
-							asset: "base" as const,
-							boneKeywords: asset.names.get(bone) ?? [bone.name],
-						},
-					}))
-					.filter(
-						(x) =>
-							x.sourceNode !== undefined &&
-							!roots.some((root) => root.sourceNode === x.sourceNode),
+		const counts = bindArmatures(
+			this.base,
+			item.asset,
+			item.warnings,
+			item.resolved,
+			item.undo,
+		);
+		item.matchedBones = counts.matched;
+		item.requestedBones = counts.requested;
+		this.refreshSprings(item.asset);
+	}
+	private compileComponents(item: Item): Compiled[] {
+		return (item.asset.manifest?.components ?? []).flatMap(
+			(component, order) => {
+				if (!item.asset.nodes.has(component.sourceNode))
+					throw new CompositionError(
+						"INVALID_LOCAL_REFERENCE",
+						`Missing component source ${component.sourceNode}`,
 					);
-		const used = new Set<Object3D>();
-		for (const entry of [
-			...mappings.map((m) => ({ ...m, mode: "preserveWorld" as const })),
-			...roots,
-		]) {
-			item.requestedBones++;
-			const source = asset.nodes.get(entry.sourceNode);
-			if (!source || used.has(source))
-				throw new CompositionError(
-					"INVALID_RIG_REFERENCE",
-					`Missing or repeated rig source ${entry.sourceNode}`,
-				);
-			used.add(source);
-			const target = this.take(
-				item,
-				item.resolver.node(entry.target, "bone"),
-				`bone:${entry.sourceNode}`,
-			);
-			if (!target) continue;
-			if (entry.target.asset !== "base")
-				throw new CompositionError(
-					"INVALID_RIG_TARGET",
-					"Attachment targets must address the base",
-				);
-			const rest = this.base.restAtCurrentRoot(target);
-			if (Math.abs(rest.determinant()) < 1e-12) {
-				item.warnings.push({
-					code: "SINGULAR_BIND",
-					message: `Cannot bind ${source.name}; its reference bone is retained.`,
-				});
-				continue;
-			}
-			const helper = new Bone();
-			helper.name = `${source.name}:mochiya-offset`;
-			helper.userData.mochiyaGenerated = true;
-			helper.matrixAutoUpdate = false;
-			helper.matrix.copy(
-				entry.mode === "snap"
-					? new Matrix4()
-					: rest.invert().multiply(asset.restAtCurrentRoot(source)),
-			);
-			const parent = source.parent;
-			const matrix = source.matrix.clone(),
-				position = source.position.clone(),
-				quaternion = source.quaternion.clone(),
-				scale = source.scale.clone(),
-				automatic = source.matrixAutoUpdate;
-			const sibling = parent?.children.indexOf(source) ?? -1;
-			target.add(helper);
-			helper.add(source);
-			source.position.set(0, 0, 0);
-			source.quaternion.identity();
-			source.scale.set(1, 1, 1);
-			source.matrix.identity();
-			source.matrixAutoUpdate = true;
-			item.undo.push(() => {
-				source.removeFromParent();
-				if (parent) {
-					parent.add(source);
-					if (sibling >= 0) {
-						parent.children.splice(parent.children.indexOf(source), 1);
-						parent.children.splice(sibling, 0, source);
-					}
+				if (component.type === "shapeChanger")
+					component.shapes.forEach((shape, i) => {
+						if (shape.changeType === "delete")
+							item.warnings.push({
+								code: "SHAPE_DELETE_FALLBACK",
+								operation: component.id,
+								query: shape.target,
+								message: `Delete entry ${i} uses blendshape weight 0; geometry is not deleted.`,
+							});
+					});
+				if (
+					item === this.baseItem &&
+					(component.type === "mergeArmature" || component.type === "boneProxy")
+				) {
+					item.warnings.push({
+						code: "LOCAL_RIG_UNMERGED",
+						operation: component.id,
+						message:
+							"Avatar armatures remain separate; base-to-attachment following is applied only when attaching an asset.",
+					});
+					item.resolved.push({
+						componentId: component.id,
+						operation: "bone",
+						sourceNode: component.sourceNode,
+						status: "skipped",
+						query: component.target,
+					});
 				}
-				source.position.copy(position);
-				source.quaternion.copy(quaternion);
-				source.scale.copy(scale);
-				source.matrix.copy(matrix);
-				source.matrixAutoUpdate = automatic;
-				helper.removeFromParent();
-			});
-			item.matchedBones++;
-		}
-		this.base.scene.updateWorldMatrix(true, true);
-		asset.scene.updateWorldMatrix(true, true);
-		this.refreshSprings(asset);
+				if (
+					component.type === "menuItem" &&
+					!component.automatic &&
+					component.parameter
+				)
+					item.warnings.push({
+						code: "MENU_PARAMETER_ONLY",
+						operation: component.id,
+						message:
+							"Named menu parameter is available locally; arbitrary Animator parameter effects are not executed.",
+					});
+				return operations(component, order).flatMap((action) => {
+					const compiled = this.compile(item, action);
+					item.resolved.push({
+						componentId: component.id,
+						operation: action.id,
+						status: compiled ? "resolved" : "skipped",
+						target: compiled?.targets.join(", "),
+						query: action.type === "morph.sync" ? action.driven : action.target,
+					});
+					return compiled ?? [];
+				});
+			},
+		);
 	}
 	private refreshSprings(asset: AvatarAsset) {
 		const manager = asset.vrm?.springBoneManager;
@@ -415,20 +399,24 @@ export class AvatarCompositionSession {
 	): (() => boolean) | undefined {
 		if (!condition) return () => true;
 		if (condition.type === "control") {
-			const control = item.asset.manifest?.controls.find(
-				(c) => c.id === condition.control,
+			const controls = menuItems(item.asset.manifest).filter(
+				(c) => (c.parameter ?? c.id) === condition.control,
 			);
+			const control =
+				controls.find((c) => Number(c.defaultValue) !== 0) ?? controls[0];
 			if (!control)
 				throw new CompositionError(
 					"INVALID_CONTROL",
 					`Unknown control ${condition.control}`,
 				);
 			return () => {
-				const value = item.state.controls?.[control.id] ?? control.defaultValue;
+				const value =
+					item.state.controls?.[control.parameter ?? control.id] ??
+					control.defaultValue;
 				const result =
 					condition.value === undefined
 						? Boolean(value)
-						: value === condition.value;
+						: Number(value) === Number(condition.value);
 				return condition.inverse ? !result : result;
 			};
 		}
@@ -436,13 +424,37 @@ export class AvatarCompositionSession {
 			asset: condition.asset ?? "self",
 			node: condition.node,
 			nodeKeywords: condition.nodeKeywords,
+			path: condition.path,
 		};
 		const node = this.take(item, item.resolver.node(selector), "condition");
 		if (!node) return undefined;
-		return () =>
-			condition.inverse
-				? !this.logicalActive(item, node, item.resolver.asset(selector))
-				: this.logicalActive(item, node, item.resolver.asset(selector));
+		const asset = item.resolver.asset(selector);
+		const menus = menuItems(item.asset.manifest);
+		let menu: (typeof menus)[number] | undefined;
+		if (asset === item.asset) {
+			for (
+				let current: Object3D | undefined = node;
+				current;
+				current = asset.authoredParents.get(current) ?? undefined
+			) {
+				menu = menus.find((c) => asset.nodes.get(c.sourceNode) === current);
+				if (menu) break;
+			}
+		}
+		return () => {
+			let active = this.logicalActive(item, node, asset);
+			if (menu) {
+				const key = menu.parameter ?? menu.id;
+				const defaultValue =
+					menus.find(
+						(c) =>
+							(c.parameter ?? c.id) === key && Number(c.defaultValue) !== 0,
+					)?.defaultValue ?? menu.defaultValue;
+				active &&=
+					Number(item.state.controls?.[key] ?? defaultValue) === menu.value;
+			}
+			return condition.inverse ? !active : active;
+		};
 	}
 	private morphBinding(mesh: Mesh, index: number): Binding {
 		return {
@@ -472,12 +484,14 @@ export class AvatarCompositionSession {
 			reads: [],
 			writes: [],
 			conditionReads: [],
+			targets: [],
 		};
 		if (action.condition?.type === "nodeActive") {
 			const selector: Selector = {
 				asset: action.condition.asset ?? "self",
 				node: action.condition.node,
 				nodeKeywords: action.condition.nodeKeywords,
+				path: action.condition.path,
 			};
 			const asset = item.resolver.asset(selector);
 			for (
@@ -499,6 +513,10 @@ export class AvatarCompositionSession {
 			);
 			if (!targets) return;
 			const bindings = targets.map((t) => this.morphBinding(t.mesh, t.index));
+			result.targets = targets.map(
+				({ mesh, index }) =>
+					`${mesh.name}:${Object.keys(mesh.morphTargetDictionary ?? {}).find((name) => mesh.morphTargetDictionary![name] === index) ?? index}`,
+			);
 			result.writes = bindings.map((b) => b.key);
 			if (action.type === "morph.override")
 				result.execute = () =>
@@ -527,6 +545,7 @@ export class AvatarCompositionSession {
 			);
 			if (!target) return;
 			const binding = this.visibleBinding(target);
+			result.targets = [target.name];
 			result.writes = [binding.key];
 			result.execute = () => this.write(binding, action.value);
 		} else if (action.type === "material.swap") {
@@ -560,6 +579,13 @@ export class AvatarCompositionSession {
 				});
 				return;
 			}
+			result.targets = valid.map(
+				(mesh) => `${mesh.name}:material[${action.slot}]`,
+			);
+			result.writes = valid.map(
+				(mesh) =>
+					`${mesh.uuid}:material:${targetAsset.primitiveSlots.has(mesh) || !(target as Mesh).isMesh ? "primitive" : action.slot}`,
+			);
 			result.execute = () =>
 				valid.forEach((mesh) => {
 					const wholePrimitive =
@@ -585,50 +611,6 @@ export class AvatarCompositionSession {
 					};
 					this.write(binding, material);
 				});
-		} else if (action.type === "collider.link") {
-			const target = this.take(
-				item,
-				item.resolver.node(action.target, "bone"),
-				action.id,
-			);
-			const colliderNode = this.take(
-				item,
-				item.resolver.node(action.collider),
-				action.id,
-			);
-			if (!target || !colliderNode) return;
-			const manager = item.resolver.asset(action.target).vrm?.springBoneManager;
-			const colliders =
-				item.resolver
-					.asset(action.collider)
-					.vrm?.springBoneManager?.colliders.filter(
-						(c) => c === colliderNode || c.parent === colliderNode,
-					) ?? [];
-			const joints = [...(manager?.joints ?? [])].filter(
-				(j) => j.bone === target,
-			);
-			if (!colliders.length || !joints.length) {
-				item.warnings.push({
-					code: "MISSING_PHYSICS_TARGET",
-					operation: action.id,
-					message: "No collider or spring joint found; this link was skipped.",
-				});
-				return;
-			}
-			const group = { colliders };
-			result.execute = () =>
-				joints.forEach((j) =>
-					this.write(
-						{
-							key: `${j.bone.uuid}:colliders`,
-							get: () => j.colliderGroups,
-							set: (value) => {
-								j.colliderGroups = value as typeof j.colliderGroups;
-							},
-						},
-						[...j.colliderGroups, group],
-					),
-				);
 		}
 		return result;
 	}
@@ -721,8 +703,8 @@ export class AvatarCompositionSession {
 				for (const mesh of item.asset.meshes)
 					if (!this.logicalActive(item, mesh, item.asset))
 						this.write(this.visibleBinding(mesh), false);
-			// Collider links must exist before either physics manager runs. Material changes are batched before rendering.
-			for (const type of ["material.swap", "collider.link"])
+			// Apply material changes before rendering.
+			for (const type of ["material.swap"])
 				for (const item of items)
 					for (const compiled of [...item.actions].sort(
 						(a, b) => a.action.sourceOrder - b.action.sourceOrder,

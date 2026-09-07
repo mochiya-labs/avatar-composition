@@ -3,7 +3,6 @@ import {
 	parseManifest,
 	type AvatarCompositionManifest,
 } from "../../src/schema";
-
 // Browser-test inputs only: no model files are read, written or bundled with the viewer.
 const bones: [string, number, [number, number, number]][] = [
 	["hips", -1, [0, 1, 0]],
@@ -22,7 +21,6 @@ const bones: [string, number, [number, number, number]][] = [
 	["rightLowerLeg", 12, [0, -0.4, 0]],
 	["rightFoot", 13, [0, -0.4, 0.1]],
 ];
-
 export function assetFixture(
 	name: string,
 	kind: "avatar" | "attachment",
@@ -38,52 +36,63 @@ export function assetFixture(
 		specVersion: "0.1",
 		assetKind: kind,
 		requiredCapabilities:
-			kind === "avatar" ? [] : ["rig.bind", "morph.override", "morph.sync"],
+			kind === "avatar"
+				? []
+				: ["mergeArmature", "shapeChanger", "blendshapeSync"],
 		rig: {
 			role: kind === "avatar" ? "avatar" : "attachmentReference",
-			jointMappings:
-				kind === "avatar"
-					? []
-					: bones.map(([bone], sourceNode) => ({
-							sourceNode,
-							target: { asset: "base", boneKeywords: [bone] },
-						})),
 		},
-		actions:
+		components:
 			kind === "avatar"
 				? []
 				: [
 						{
+							id: "rig",
+							type: "mergeArmature",
+							sourceNode: 0,
+							target: { asset: "base", boneKeywords: ["hips"] },
+						},
+						{
 							id: "fit",
-							type: "morph.override",
-							target: {
-								asset: "base",
-								meshKeywords: ["Body"],
-								blendshapeKeywords: ["Body_Slim"],
-							},
-							value: 0.4,
+							sourceNode: 0,
+							type: "shapeChanger" as const,
+							shapes: [
+								{
+									target: {
+										asset: "base",
+										meshKeywords: ["Body"],
+										blendshapeKeywords: ["Body_Slim"],
+									},
+									value: 0.4,
+									changeType: "set" as const,
+								},
+							],
 						},
 						{
 							id: "sync",
-							type: "morph.sync",
-							driver: {
-								asset: "base",
-								meshKeywords: ["Body"],
-								blendshapeKeywords: ["Body_Slim"],
-							},
-							driven: { asset: "self", node: bones.length, morphIndex: 0 },
-							curve: {
-								interpolation: "linear",
-								points: [
-									[0, 0],
-									[1, 1],
-								],
-							},
+							sourceNode: 0,
+							type: "blendshapeSync" as const,
+							bindings: [
+								{
+									driver: {
+										asset: "base",
+										meshKeywords: ["Body"],
+										blendshapeKeywords: ["Body_Slim"],
+									},
+									driven: { asset: "self", node: bones.length, morphIndex: 0 },
+									curve: {
+										interpolation: "linear",
+										points: [
+											[0, 0],
+											[1, 1],
+										],
+									},
+								},
+							],
 						},
 					],
 	});
 	edit?.(manifest);
-
 	const parts: Buffer[] = [];
 	const bufferViews: {
 		buffer: number;
@@ -135,7 +144,6 @@ export function assetFixture(
 			}) - 1
 		);
 	}
-
 	const geometry = new BoxGeometry(0.5, 1.6, 0.3).translate(0, 0.8, 0);
 	const positions = new Float32Array(geometry.attributes.position.array);
 	const normals = new Float32Array(geometry.attributes.normal.array);
@@ -180,7 +188,6 @@ export function assetFixture(
 		inverseBindMatrices: accessor(new Float32Array(inverseBinds), 16, "MAT4"),
 	};
 	geometry.dispose();
-
 	const extensions: Record<string, unknown> = {
 		MOCHIYA_avatar_composition: manifest,
 	};

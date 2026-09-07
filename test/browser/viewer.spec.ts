@@ -1,24 +1,31 @@
 import { test, expect, type Page } from "@playwright/test";
 import { assetFixture } from "./asset-fixture";
-
 const baseFile = assetFixture("avatar.vrm", "avatar");
 const attachmentFile = assetFixture("attachment.vrm", "attachment");
-
 function controlledAttachment() {
 	return assetFixture("controlled.vrm", "attachment", (manifest) => {
-		manifest.requiredCapabilities.push("control");
-		manifest.controls.push({
+		manifest.requiredCapabilities.push("menuItem");
+		manifest.components.push({
+			type: "menuItem",
+			sourceNode: 0,
+			controlType: "toggle",
+			automatic: false,
+			value: 1,
+			origin: "authored",
 			id: "fit-enabled",
 			label: "Fit body",
 			defaultValue: true,
 		});
-		manifest.actions.find((action) => action.id === "fit")!.condition = {
+		const fit = manifest.components.find(
+			(action) => action.type === "shapeChanger" && action.id === "fit",
+		)!;
+		if (fit.type !== "shapeChanger") throw new Error("Missing fit instruction");
+		fit.condition = {
 			type: "control",
 			control: "fit-enabled",
 		};
 	});
 }
-
 async function loadBase(page: Page) {
 	await expect(
 		page.getByRole("button", { name: "Load avatar", exact: true }).first(),
@@ -30,7 +37,52 @@ async function loadBase(page: Page) {
 		page.getByRole("button", { name: "avatar.vrm Current base" }),
 	).toBeVisible();
 }
-
+test("momentary menu buttons release on keyboard, pointer and window cancellation", async ({
+	page,
+}) => {
+	const file = assetFixture("button.vrm", "attachment", (manifest) => {
+		manifest.components.push({
+			id: "press",
+			type: "menuItem",
+			sourceNode: 0,
+			origin: "authored",
+			label: "Hold fit",
+			controlType: "button",
+			automatic: false,
+			value: 1,
+			defaultValue: 0,
+		});
+		for (const c of manifest.components)
+			if (c.type === "shapeChanger")
+				c.condition = { type: "control", control: "press", value: 1 };
+	});
+	const errors: string[] = [];
+	page.on("pageerror", (e) => errors.push(e.message));
+	await page.goto("/");
+	await loadBase(page);
+	await page.getByLabel("Attachment file", { exact: true }).setInputFiles(file);
+	const button = page.getByRole("button", { name: "Hold fit", exact: true });
+	await expect(button).toBeVisible();
+	await expect.poll(() => weight(page)).toBe(0);
+	await button.focus();
+	await page.keyboard.down("Space");
+	await expect.poll(() => weight(page)).toBe(0.4);
+	await page.keyboard.up("Space");
+	await expect.poll(() => weight(page)).toBe(0);
+	await button.hover();
+	await page.mouse.down();
+	await expect.poll(() => weight(page)).toBe(0.4);
+	await page.mouse.up();
+	await expect.poll(() => weight(page)).toBe(0);
+	await button.focus();
+	await page.keyboard.down("Enter");
+	await expect.poll(() => weight(page)).toBe(0.4);
+	await page.evaluate(() => window.dispatchEvent(new Event("blur")));
+	await expect.poll(() => weight(page)).toBe(0);
+	await page.keyboard.up("Enter");
+	await page.getByRole("button", { name: "Remove button.vrm" }).click();
+	expect(errors).toEqual([]);
+});
 function weight(page: Page) {
 	return page.evaluate(
 		() =>
@@ -38,7 +90,6 @@ function weight(page: Page) {
 				.morphTargetInfluences[0],
 	);
 }
-
 test("the enhanced VRM loader renders lilToon GLB with tangents and no VRM runtime", async ({
 	page,
 }) => {
@@ -61,8 +112,11 @@ test("the enhanced VRM loader renders lilToon GLB with tangents and no VRM runti
 			.meshes[0];
 		mesh.onAfterRender = () => {
 			mesh.userData.drewOutline = mesh.children.some(
-				(child: { material?: { pass?: string } }) =>
-					child.material?.pass === "outline",
+				(child: {
+					material?: {
+						pass?: string;
+					};
+				}) => child.material?.pass === "outline",
 			);
 		};
 	});
@@ -83,7 +137,6 @@ test("the enhanced VRM loader renders lilToon GLB with tangents and no VRM runti
 		.toEqual({ vrm: false, lilToon: true, tangents: true, outline: true });
 	expect(errors).toEqual([]);
 });
-
 test("lilToon material expressions load automatically on avatars and attachments", async ({
 	page,
 }) => {
@@ -117,8 +170,11 @@ test("lilToon material expressions load automatically on avatars and attachments
 				const mesh = item.asset.meshes[0];
 				mesh.onAfterRender = () => {
 					const outline = mesh.children.find(
-						(child: { material?: { pass?: string } }) =>
-							child.material?.pass === "outline",
+						(child: {
+							material?: {
+								pass?: string;
+							};
+						}) => child.material?.pass === "outline",
 					);
 					mesh.userData.observedOutline =
 						outline?.material.lilToonProperties._OutlineColor;
@@ -156,7 +212,6 @@ test("lilToon material expressions load automatically on avatars and attachments
 	await loadBase(page);
 	expect(errors).toEqual([]);
 });
-
 test("material swaps and undo update lilToon rendering without a composition bridge", async ({
 	page,
 }) => {
@@ -179,7 +234,11 @@ test("material swaps and undo update lilToon rendering without a composition bri
 			.meshes[0];
 		mesh.onAfterRender = () => {
 			mesh.userData.outlineDraw = mesh.children.some(
-				(n: { material?: { pass?: string } }) => n.material?.pass === "outline",
+				(n: {
+					material?: {
+						pass?: string;
+					};
+				}) => n.material?.pass === "outline",
 			);
 		};
 	});
@@ -191,14 +250,19 @@ test("material swaps and undo update lilToon rendering without a composition bri
 		);
 	await expect.poll(outlined).toBe(true);
 	const replacement = assetFixture("material.glb", "attachment", (manifest) => {
-		manifest.requiredCapabilities.push("material.swap");
-		manifest.actions.push({
+		manifest.requiredCapabilities.push("materialSetter");
+		manifest.components.push({
 			id: "replace",
-			sourceOrder: 1,
-			type: "material.swap",
-			target: { asset: "base", meshKeywords: ["Body"] },
-			slot: 0,
-			material: 0,
+			sourceNode: 0,
+			type: "materialSetter" as const,
+			origin: "authored",
+			objects: [
+				{
+					target: { asset: "base", meshKeywords: ["Body"] },
+					slot: 0,
+					material: 0,
+				},
+			],
 		});
 	});
 	await page
@@ -219,7 +283,6 @@ test("material swaps and undo update lilToon rendering without a composition bri
 	).toBe(0);
 	expect(errors).toEqual([]);
 });
-
 test("empty viewer has persistent panels and no demo or stage settings", async ({
 	page,
 }) => {
@@ -259,7 +322,6 @@ test("empty viewer has persistent panels and no demo or stage settings", async (
 	).toEqual({ base: false, attachments: 0 });
 	await page.screenshot({ path: "test-results/viewer-empty.png" });
 });
-
 test("local attachment controls, hide, removal and base replacement", async ({
 	page,
 }) => {
@@ -299,16 +361,18 @@ test("local attachment controls, hide, removal and base replacement", async ({
 	await expect.poll(() => weight(page)).toBe(0);
 	expect(errors).toEqual([]);
 });
-
 test("inspector controls meshes, blendshapes, and the collapsed bone tree", async ({
 	page,
 }) => {
 	await page.goto("/");
 	await loadBase(page);
-
 	const meshVisibility = page.getByRole("switch", {
 		name: "Mesh visibility: Body",
 	});
+	const meshes = page.locator('details[data-section="meshes"]');
+	await expect(meshes).not.toHaveAttribute("open", "");
+	await expect(meshVisibility).not.toBeVisible();
+	await meshes.locator(":scope > summary").click();
 	await expect(meshVisibility).toBeChecked();
 	await meshVisibility.click();
 	await expect(meshVisibility).not.toBeChecked();
@@ -323,14 +387,17 @@ test("inspector controls meshes, blendshapes, and the collapsed bone tree", asyn
 		.toBe(false);
 	await meshVisibility.click();
 	await expect(meshVisibility).toBeChecked();
-
 	const blendshapes = page.getByLabel("Body blendshapes");
 	await expect(
 		page.getByRole("slider", { name: "Body_Slim" }),
 	).not.toBeVisible();
 	await blendshapes.click();
 	await expect(page.getByRole("slider", { name: "Body_Slim" })).toBeVisible();
-
+	await meshes.locator(":scope > summary").click();
+	await expect(meshVisibility).not.toBeVisible();
+	await expect(
+		page.getByRole("slider", { name: "Body_Slim" }),
+	).not.toBeVisible();
 	const boneTree = page.locator('details[data-section="bones"]');
 	await expect(boneTree).not.toHaveAttribute("open", "");
 	await expect(page.getByText("hips", { exact: true })).not.toBeVisible();
@@ -340,7 +407,44 @@ test("inspector controls meshes, blendshapes, and the collapsed bone tree", asyn
 	await page.getByText("hips", { exact: true }).click();
 	await expect(page.getByText("spine", { exact: true })).toBeVisible();
 });
-
+test("inspector exposes every Avatar Composition base relationship", async ({
+	page,
+}) => {
+	await page.goto("/");
+	await loadBase(page);
+	await page
+		.getByLabel("Attachment file", { exact: true })
+		.setInputFiles(attachmentFile);
+	await expect(
+		page.getByRole("button", { name: "attachment.vrm Attached" }),
+	).toBeVisible();
+	const extension = page.locator(
+		'details[data-section="composition-extension"]',
+	);
+	await expect(extension).not.toHaveAttribute("open", "");
+	await extension.locator(":scope > summary").click();
+	await expect(
+		extension.getByText("attachment", { exact: true }),
+	).toBeVisible();
+	await expect(
+		extension.getByText("attachmentReference", { exact: true }),
+	).toBeVisible();
+	await extension.locator('[data-component-id="rig"] > summary').click();
+	await extension.locator('[data-component-id="fit"] > summary').click();
+	await extension.locator('[data-component-id="sync"] > summary').click();
+	await expect(extension.locator("[data-rig-link]")).toHaveCount(15);
+	await expect(extension.locator("[data-component-id]")).toHaveCount(3);
+	await expect(extension.locator('[data-component-id="fit"]')).toContainText(
+		"Body_Slim",
+	);
+	await expect(extension.locator('[data-component-id="sync"]')).toContainText(
+		"This asset",
+	);
+	await expect(
+		extension.getByText("hips (#0)", { exact: true }).first(),
+	).toBeVisible();
+	await expect(extension.getByText("Raw extension manifest")).toBeVisible();
+});
 test("VRM debug visualizers are off by default and toggle per asset", async ({
 	page,
 }) => {
@@ -353,7 +457,6 @@ test("VRM debug visualizers are off by default and toggle per asset", async ({
 			springBones: true,
 		}),
 	);
-
 	const attachmentToggle = page.getByRole("switch", {
 		name: "Show debug visualizers debug-attachment.vrm",
 	});
@@ -367,7 +470,11 @@ test("VRM debug visualizers are off by default and toggle per asset", async ({
 				baseVisible: base.debugVisualizers.root.visible,
 				attachmentVisible: attachment.debugVisualizers.root.visible,
 				helperTypes: attachment.debugVisualizers.root.children.map(
-					(child: { constructor: { name: string } }) => child.constructor.name,
+					(child: {
+						constructor: {
+							name: string;
+						};
+					}) => child.constructor.name,
 				),
 			};
 		}),
@@ -380,7 +487,6 @@ test("VRM debug visualizers are off by default and toggle per asset", async ({
 			"VRMSpringBoneColliderHelper",
 		]),
 	});
-
 	await attachmentToggle.click();
 	await expect(attachmentToggle).toBeChecked();
 	await expect
@@ -392,7 +498,6 @@ test("VRM debug visualizers are off by default and toggle per asset", async ({
 			),
 		)
 		.toBe(true);
-
 	await page.getByRole("button", { name: "Hide debug-attachment.vrm" }).click();
 	await expect
 		.poll(() =>
@@ -413,7 +518,6 @@ test("VRM debug visualizers are off by default and toggle per asset", async ({
 			),
 		)
 		.toBe(true);
-
 	await page.getByRole("button", { name: "avatar.vrm Current base" }).click();
 	const baseToggle = page.getByRole("switch", {
 		name: "Show debug visualizers avatar.vrm",
@@ -439,7 +543,6 @@ test("VRM debug visualizers are off by default and toggle per asset", async ({
 	).toEqual({ parent: null, children: 0 });
 	expect(errors).toEqual([]);
 });
-
 test("unmatched names warn while matched actions still run", async ({
 	page,
 }) => {
@@ -449,7 +552,9 @@ test("unmatched names warn while matched actions still run", async ({
 		"partial.vrm",
 		"attachment",
 		(manifest) => {
-			manifest.rig!.jointMappings[0].target = {
+			const rig = manifest.components.find((c) => c.type === "mergeArmature")!;
+			if (rig.type !== "mergeArmature") throw new Error("missing rig");
+			rig.target = {
 				asset: "base",
 				boneKeywords: ["MissingTestBone"],
 			};
@@ -465,13 +570,14 @@ test("unmatched names warn while matched actions still run", async ({
 	await expect(
 		page.getByRole("heading", { name: "Warnings (2)" }),
 	).toBeVisible();
+	const warningReview = page.getByRole("region", { name: "Warnings" });
 	await expect(
-		page.getByText("MissingTestBone", { exact: true }),
+		warningReview.getByText("MissingTestBone", { exact: true }),
 	).not.toBeVisible();
 	await expect(page.getByText(/spec 9\.0/)).not.toBeVisible();
 	await page.getByLabel("Composition warnings (1)").click();
 	await expect(
-		page.getByText("MissingTestBone", { exact: true }),
+		warningReview.getByText("MissingTestBone", { exact: true }),
 	).toBeVisible();
 	await page.getByLabel("lilToon warnings (1)").click();
 	await expect(page.getByText(/spec 9\.0/)).toBeVisible();
@@ -490,7 +596,6 @@ test("unmatched names warn while matched actions still run", async ({
 		animations: "disabled",
 	});
 });
-
 test("VRM and GLB load, fit and detach through the actual loader chain", async ({
 	page,
 }) => {
@@ -536,7 +641,6 @@ test("VRM and GLB load, fit and detach through the actual loader chain", async (
 	}
 	expect(errors).toEqual([]);
 });
-
 test("wrong asset roles leave the current avatar and attachment overlay intact", async ({
 	page,
 }) => {
@@ -587,7 +691,6 @@ test("wrong asset roles leave the current avatar and attachment overlay intact",
 		.toBe(0);
 	expect(errors).toEqual([]);
 });
-
 test("mobile panels and Japanese controls remain usable without toggles", async ({
 	page,
 }) => {

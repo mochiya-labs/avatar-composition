@@ -18,20 +18,24 @@ import {
 	disposeAvatarAsset,
 	prepareAvatarAsset,
 } from "../src/index.js";
-
 function attachment(material: Material, slot = 0) {
 	return new AvatarAsset(new Group(), {
 		materials: [material],
 		manifest: {
 			specVersion: "0.1",
 			assetKind: "attachment",
-			actions: [
+			components: [
 				{
 					id: "swap",
-					type: "material.swap",
-					target: { asset: "base", meshKeywords: ["Body"] },
-					slot,
-					material: 0,
+					sourceNode: 0,
+					type: "materialSetter" as const,
+					objects: [
+						{
+							target: { asset: "base", meshKeywords: ["Body"] },
+							slot,
+							material: 0,
+						},
+					],
 				},
 			],
 		},
@@ -44,7 +48,6 @@ function base(material: Material | Material[]) {
 	root.add(mesh);
 	return { mesh, asset: new AvatarAsset(root) };
 }
-
 describe("material-independent overlays", () => {
 	it.each([
 		MeshBasicMaterial,
@@ -114,7 +117,6 @@ describe("material-independent overlays", () => {
 		session.dispose();
 	});
 });
-
 describe("authored data and resource ownership", () => {
 	it("captures parser materials/textures including action-only indices and excludes generated meshes", async () => {
 		const original = new MeshBasicMaterial(),

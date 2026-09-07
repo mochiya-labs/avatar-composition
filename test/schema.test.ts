@@ -28,7 +28,7 @@ describe("extension authoring contract", () => {
 		},
 	);
 	it.each(["outfit", "accessory"])(
-		"reads legacy %s without allowing it in new manifests",
+		"rejects obsolete %s manifests",
 		(assetKind) => {
 			const legacy = Object.freeze({
 				specVersion: "0.1",
@@ -36,10 +36,7 @@ describe("extension authoring contract", () => {
 				rig: Object.freeze({ role: "outfitReference" }),
 			});
 			expect(manifestSchema.safeParse(legacy).success).toBe(false);
-			const canonical = parseManifest(legacy);
-			expect(canonical.assetKind).toBe("attachment");
-			expect(canonical.rig?.role).toBe("attachmentReference");
-			expect(manifestSchema.safeParse(canonical).success).toBe(true);
+			expect(() => parseManifest(legacy)).toThrow(/INVALID|assetKind/);
 			expect(legacy.assetKind).toBe(assetKind);
 			expect(legacy.rig.role).toBe("outfitReference");
 		},

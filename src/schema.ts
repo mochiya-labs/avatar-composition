@@ -5,14 +5,13 @@ export const SPEC_VERSION = "0.1";
 export const ASSET_KINDS = ["avatar", "attachment"] as const;
 export type AssetKind = (typeof ASSET_KINDS)[number];
 export const CAPABILITIES = [
-	"rig.bind",
-	"rig.attach",
-	"morph.sync",
-	"morph.override",
-	"node.active",
-	"material.swap",
-	"control",
-	"collider.link",
+	"mergeArmature",
+	"boneProxy",
+	"shapeChanger",
+	"blendshapeSync",
+	"objectToggle",
+	"materialSetter",
+	"menuItem",
 ] as const;
 const index = z.number().int().nonnegative();
 const number = z.number().finite();
@@ -21,12 +20,14 @@ export const selectorSchema = z
 	.object({
 		asset: z.enum(["self", "base"]),
 		node: index.optional(),
+		path: z.array(z.string().min(1).max(256)).max(128).optional(),
 		boneKeywords: keywords.optional(),
 		meshKeywords: keywords.optional(),
 		nodeKeywords: keywords.optional(),
 		blendshapeKeywords: keywords.optional(),
 		morphIndex: index.optional(),
 		humanBone: z.string().max(64).optional(),
+		humanBonePath: z.array(z.string().min(1).max(256)).max(128).optional(),
 		parentKeywords: keywords.optional(),
 	})
 	.strict()
@@ -43,16 +44,17 @@ export const selectorSchema = z
 			ctx.addIssue({
 				code: "custom",
 				message:
-					"External selectors use keywords, never another file's indices",
+					"External selectors use paths/keywords, never another file's indices",
 			});
 	});
 export type Selector = z.infer<typeof selectorSchema>;
-const conditionSchema = z
+export const conditionSchema = z
 	.object({
 		type: z.enum(["nodeActive", "control"]),
 		asset: z.enum(["self", "base"]).optional(),
 		node: index.optional(),
 		nodeKeywords: keywords.optional(),
+		path: z.array(z.string()).max(128).optional(),
 		control: z.string().max(128).optional(),
 		value: z.union([number, z.boolean()]).optional(),
 		inverse: z.boolean().optional(),
@@ -62,12 +64,13 @@ const conditionSchema = z
 		if (c.type === "control" && !c.control)
 			ctx.addIssue({
 				code: "custom",
-				message: "Control condition requires a control ID",
+				message: "Control condition requires an ID",
 			});
 		if (
 			c.type === "nodeActive" &&
 			c.node === undefined &&
-			!c.nodeKeywords?.length
+			!c.nodeKeywords?.length &&
+			c.path === undefined
 		)
 			ctx.addIssue({
 				code: "custom",
@@ -76,15 +79,11 @@ const conditionSchema = z
 		if (c.type === "nodeActive" && c.asset === "base" && c.node !== undefined)
 			ctx.addIssue({
 				code: "custom",
-				message: "External conditions use keywords, never node indices",
+				message: "External conditions cannot use local indices",
 			});
 	});
-const common = {
-	id: z.string().min(1).max(128),
-	condition: conditionSchema.optional(),
-	sourceOrder: number.default(0),
-};
-const curveSchema = z
+export type Condition = z.infer<typeof conditionSchema>;
+export const curveSchema = z
 	.object({
 		interpolation: z.enum(["linear", "step"]),
 		points: z
@@ -93,64 +92,128 @@ const curveSchema = z
 			.max(4096),
 	})
 	.strict()
-	.refine(
-		(c) => c.points.every((p, i) => i === 0 || p[0] > c.points[i - 1][0]),
-		"Curve inputs must be strictly increasing",
-	);
-export const actionSchema = z.discriminatedUnion("type", [
+	.superRefine((c, ctx) => {
+		if (!c.points.every((p, i) => i === 0 || p[0] > c.points[i - 1][0]))
+			ctx.addIssue({ code: "custom", message: "Curve inputs must increase" });
+	});
+export type RemapCurve = z.infer<typeof curveSchema>;
+const common = {
+	id: z.string().min(1).max(128),
+	sourceNode: index,
+	origin: z
+		.enum(["modularAvatar", "referenceRig", "colliderAnchor", "authored"])
+		.default("authored"),
+};
+export const componentSchema = z.discriminatedUnion("type", [
 	z
 		.object({
 			...common,
-			type: z.literal("morph.sync"),
-			driver: selectorSchema,
-			driven: selectorSchema,
-			curve: curveSchema.optional(),
+			type: z.literal("mergeArmature"),
+			target: selectorSchema,
+			prefix: z.string().max(256).default(""),
+			suffix: z.string().max(256).default(""),
+			lockMode: z
+				.enum(["unidirectional", "bidirectional", "notLocked"])
+				.default("unidirectional"),
+			mangleNames: z.boolean().default(true),
 		})
 		.strict(),
 	z
 		.object({
 			...common,
-			type: z.literal("morph.override"),
+			type: z.literal("boneProxy"),
 			target: selectorSchema,
-			value: number,
+			attachmentMode: z
+				.enum(["keepWorldPose", "atRoot", "keepPosition", "keepRotation"])
+				.default("keepWorldPose"),
+			matchScale: z.boolean().default(false),
 		})
 		.strict(),
 	z
 		.object({
 			...common,
-			type: z.literal("node.active"),
-			target: selectorSchema,
-			value: z.boolean(),
+			type: z.literal("shapeChanger"),
+			condition: conditionSchema.optional(),
+			shapes: z
+				.array(
+					z
+						.object({
+							target: selectorSchema,
+							changeType: z.enum(["set", "delete"]),
+							value: number.default(0),
+						})
+						.strict(),
+				)
+				.max(10000),
 		})
 		.strict(),
 	z
 		.object({
 			...common,
-			type: z.literal("material.swap"),
-			target: selectorSchema,
-			slot: index,
-			material: index,
+			type: z.literal("blendshapeSync"),
+			condition: conditionSchema.optional(),
+			bindings: z
+				.array(
+					z
+						.object({
+							driver: selectorSchema,
+							driven: selectorSchema,
+							curve: curveSchema.optional(),
+						})
+						.strict(),
+				)
+				.max(10000),
 		})
 		.strict(),
 	z
 		.object({
 			...common,
-			type: z.literal("collider.link"),
-			target: selectorSchema,
-			collider: selectorSchema,
+			type: z.literal("objectToggle"),
+			condition: conditionSchema.optional(),
+			objects: z
+				.array(
+					z.object({ target: selectorSchema, value: z.boolean() }).strict(),
+				)
+				.max(10000),
+		})
+		.strict(),
+	z
+		.object({
+			...common,
+			type: z.literal("materialSetter"),
+			condition: conditionSchema.optional(),
+			objects: z
+				.array(
+					z
+						.object({ target: selectorSchema, slot: index, material: index })
+						.strict(),
+				)
+				.max(10000),
+		})
+		.strict(),
+	z
+		.object({
+			...common,
+			type: z.literal("menuItem"),
+			label: z.string().max(256),
+			controlType: z.enum(["toggle", "button"]),
+			parameter: z.string().min(1).max(128).optional(),
+			value: number.default(1),
+			defaultValue: z.union([number, z.boolean()]).default(0),
+			automatic: z.boolean().default(true),
 		})
 		.strict(),
 ]);
-export type Action = z.infer<typeof actionSchema>;
-export type Condition = z.infer<typeof conditionSchema>;
+export type CompositionComponent = z.infer<typeof componentSchema>;
+export type MergeArmature = Extract<
+	CompositionComponent,
+	{ type: "mergeArmature" }
+>;
+export type MenuItem = Extract<CompositionComponent, { type: "menuItem" }>;
 export const manifestSchema = z
 	.object({
 		specVersion: z.literal(SPEC_VERSION),
-		assetKind: z
-			.enum(ASSET_KINDS)
-			.describe(
-				"An independent avatar or an attachment that depends on a base avatar.",
-			),
+		assetKind: z.enum(ASSET_KINDS),
 		requiredCapabilities: z.array(z.string().max(64)).max(32).default([]),
 		matching: z
 			.object({
@@ -161,49 +224,9 @@ export const manifestSchema = z
 			.strict()
 			.optional(),
 		rig: z
-			.object({
-				role: z
-					.enum(["avatar", "attachmentReference"])
-					.describe(
-						"Avatar rig or attachment reference rig; a reference humanoid does not make an attachment a base avatar.",
-					),
-				jointMappings: z
-					.array(
-						z.object({ sourceNode: index, target: selectorSchema }).strict(),
-					)
-					.max(4096)
-					.default([]),
-				attachmentRoots: z
-					.array(
-						z
-							.object({
-								sourceNode: index,
-								target: selectorSchema,
-								mode: z
-									.enum(["preserveWorld", "snap"])
-									.default("preserveWorld"),
-							})
-							.strict(),
-					)
-					.max(4096)
-					.default([]),
-			})
+			.object({ role: z.enum(["avatar", "attachmentReference"]) })
 			.strict()
 			.optional(),
-		controls: z
-			.array(
-				z
-					.object({
-						id: z.string().min(1).max(128),
-						label: z.string().max(256),
-						defaultValue: z.union([number, z.boolean()]),
-						min: number.optional(),
-						max: number.optional(),
-					})
-					.strict(),
-			)
-			.max(1024)
-			.default([]),
 		nodes: z
 			.array(
 				z
@@ -216,7 +239,7 @@ export const manifestSchema = z
 			)
 			.max(100000)
 			.default([]),
-		actions: z.array(actionSchema).max(10000).default([]),
+		components: z.array(componentSchema).max(10000).default([]),
 	})
 	.strict();
 export type AvatarCompositionManifest = z.infer<typeof manifestSchema>;
@@ -230,23 +253,8 @@ export class CompositionError extends Error {
 		this.name = "CompositionError";
 	}
 }
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-/** Compatibility is a reader concern; the authoring schema exposes only current values. */
-function normalizeLegacyManifest(input: unknown): unknown {
-	if (!isRecord(input)) return input;
-	const normalized = { ...input };
-	if (normalized.assetKind === "outfit" || normalized.assetKind === "accessory")
-		normalized.assetKind = "attachment";
-	if (isRecord(normalized.rig) && normalized.rig.role === "outfitReference") {
-		normalized.rig = { ...normalized.rig, role: "attachmentReference" };
-	}
-	return normalized;
-}
-/** Parse current or legacy file data without modifying the supplied record. */
 export function parseManifest(input: unknown): AvatarCompositionManifest {
-	const result = manifestSchema.safeParse(normalizeLegacyManifest(input));
+	const result = manifestSchema.safeParse(input);
 	if (!result.success)
 		throw new CompositionError(
 			"INVALID_MANIFEST",
@@ -259,19 +267,25 @@ export function parseManifest(input: unknown): AvatarCompositionManifest {
 		if (!(CAPABILITIES as readonly string[]).includes(capability))
 			throw new CompositionError(
 				"UNSUPPORTED_CAPABILITY",
-				`Unsupported required operation: ${capability}`,
+				`Unsupported required component: ${capability}`,
 			);
-	for (const entries of [manifest.actions, manifest.controls]) {
-		const ids = new Set<string>();
-		for (const entry of entries) {
-			if (ids.has(entry.id))
-				throw new CompositionError("DUPLICATE_ID", `Duplicate ID: ${entry.id}`);
-			ids.add(entry.id);
-		}
+	const ids = new Set<string>();
+	for (const component of manifest.components) {
+		if (ids.has(component.id))
+			throw new CompositionError(
+				"DUPLICATE_ID",
+				`Duplicate ID: ${component.id}`,
+			);
+		ids.add(component.id);
 	}
 	return manifest;
 }
-
+export function menuItems(manifest?: AvatarCompositionManifest): MenuItem[] {
+	return (
+		manifest?.components.filter((c): c is MenuItem => c.type === "menuItem") ??
+		[]
+	);
+}
 export interface CompositionWarning {
 	code: string;
 	message: string;

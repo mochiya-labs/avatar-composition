@@ -32,7 +32,8 @@
 		"examples/viewer/tsconfig.json",
 		"examples/viewer/vite.config.ts",
 		"README.md",
-		"LICENSE"
+		"LICENSE",
+		"specification"
 	],
 	"workspaces": [
 		"examples/viewer"
