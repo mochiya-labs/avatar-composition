@@ -106,7 +106,7 @@ npm install /path/to/mochiya-avatar-composition-0.1.0.tgz three@0.185.1 @pixiv/t
 
 ## Use in Three.js
 
-The host supplies `scene`, the base animation `mixer` and render loop. Await loading before preparing assets. The core has no material-library dependency.
+The host supplies `scene`, retargeted animation clips and the render loop. The session can own the base animation mixer and frame ordering. Await loading before preparing assets. The core has no material-library dependency.
 
 ```ts
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
@@ -137,11 +137,7 @@ console.log(result.status, result.warnings, result.resolved); // attached | part
 
 function update(delta: number) {
 	// Call once per rendered frame.
-	session.beforeVrmUpdate();
-	mixer?.update(delta);
-	base.vrm?.update(delta);
-	scene.updateMatrixWorld(true);
-	session.afterVrmUpdate(delta);
+	session.update(delta);
 	const updated = new Set(base.vrm?.materials ?? []);
 	for (const material of attachment.vrm?.materials ?? []) {
 		if (!attachment.scene.visible || updated.has(material)) continue;
@@ -164,6 +160,10 @@ function cleanup() {
 ```
 
 Controls use the menu parameter or component ID: `setItemState(id, { controls: { controlId: value } })`, `setBaseControl()` and `setBaseMorph()`. Use `menuItems(asset.manifest)` to build a control UI; buttons send their value while held and 0 on release/cancel. The session advances attachment expressions/constraints/springs; update the whole VRM only on the base. Plain GLB has no VRM physics.
+
+For editable mesh morphs, call `session.isMorphControlled(mesh, index)` before enabling a slider and `session.setMorph(mesh, index, value)` to apply a user weight. The latter returns false for a currently composition-controlled target and throws for non-finite values or targets outside the session. Accepted weights survive VRM expression updates; active composition writes still take precedence. Recheck controls after attachment visibility, menu or membership changes.
+
+Pass a clip retargeted to `base.vrm` to `session.setAnimation(clip, time)`. The session creates one mixer on the base scene; use `session.update(delta, paused)` for playback and `animationTime` for serialization. Passing `null` stops playback and resets the normalized humanoid pose. `session.update(delta)` restores overlays, advances the mixer and base VRM, updates world matrices, then evaluates attachment behavior. Hosts that already own animation may instead retain `beforeVrmUpdate()` / `afterVrmUpdate(delta)` around their own base update; use only one frame-update approach.
 
 Use independent loaded instances per attachment. Detach before disposal; session disposal restores overlays without freeing assets. Changing bases requires a new session and renewed matching.
 

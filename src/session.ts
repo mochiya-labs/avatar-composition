@@ -1,4 +1,10 @@
-import { Mesh, Object3D, type Material } from "three";
+import {
+	AnimationMixer,
+	Mesh,
+	Object3D,
+	type AnimationClip,
+	type Material,
+} from "three";
 import { AvatarAsset } from "./asset.js";
 import { NameResolver, type Match } from "./matching.js";
 import {
@@ -69,7 +75,7 @@ export function evaluateCurve(
 	return a[1] + (b[1] - a[1]) * ((value - a[0]) / (b[0] - a[0]));
 }
 
-/** One session owns one live base. Host calls beforeVrmUpdate, updates base, then afterVrmUpdate. */
+/** One session owns one live base. Use update(), or bracket a custom base update with the lifecycle hooks. */
 export class AvatarCompositionSession {
 	readonly base: AvatarAsset;
 	private readonly items = new Map<string, Item>();
@@ -79,6 +85,9 @@ export class AvatarCompositionSession {
 	>();
 	private readonly baseItem: Item;
 	private disposed = false;
+	private mixer: AnimationMixer | undefined;
+	private animation: AnimationClip | undefined;
+	private readonly userMorphs = new Map<Mesh, Map<number, number>>();
 	private readonly deletion = new ShapeDeletion();
 	constructor(options: { base: AvatarAsset }) {
 		this.base = options.base;
@@ -236,6 +245,65 @@ export class AvatarCompositionSession {
 			mesh.morphTargetInfluences![index] = value;
 		this.evaluate();
 	}
+	/** Whether an active component currently owns this mesh weight. Geometry deletion alone does not drive it. */
+	isMorphControlled(mesh: Mesh, index: number): boolean {
+		const key = `${mesh.uuid}:morph:${index}`;
+		return this.orderedItems().some(
+			(item) =>
+				item.state.visible !== false &&
+				item.actions.some(
+					(action) => action.writes.includes(key) && action.condition(),
+				),
+		);
+	}
+	/** Edit any session-owned mesh without overriding a composition-driven weight. */
+	setMorph(mesh: Mesh, index: number, value: number): boolean {
+		this.requireLive();
+		if (!Number.isFinite(value)) throw new Error("Morph value must be finite");
+		if (
+			!this.orderedItems().some((item) => item.asset.meshes.includes(mesh)) ||
+			mesh.morphTargetInfluences?.[index] === undefined
+		)
+			throw new Error("Mesh morph is not owned by this session");
+		if (this.isMorphControlled(mesh, index)) return false;
+		this.restoreLayers();
+		mesh.morphTargetInfluences[index] = value;
+		const edits = this.userMorphs.get(mesh) ?? new Map<number, number>();
+		edits.set(index, value);
+		this.userMorphs.set(mesh, edits);
+		this.evaluate();
+		return true;
+	}
+	/** Supply a clip retargeted to the base. Attachments follow the base through composition. */
+	setAnimation(clip: AnimationClip | null, time = 0): void {
+		this.requireLive();
+		if (!Number.isFinite(time) || time < 0)
+			throw new Error("Animation time must be finite and nonnegative");
+		this.mixer?.stopAllAction();
+		if (this.animation) this.mixer?.uncacheClip(this.animation);
+		this.base.vrm?.humanoid.resetNormalizedPose();
+		this.animation = clip ?? undefined;
+		if (!clip) {
+			this.mixer = undefined;
+			return;
+		}
+		this.mixer ??= new AnimationMixer(this.base.scene);
+		this.mixer.clipAction(clip).reset().play();
+		this.mixer.setTime(Math.max(0, time));
+	}
+	get animationTime(): number {
+		return this.mixer?.time ?? 0;
+	}
+	/** Complete frame lifecycle; use instead of separately advancing base and attachment VRMs. */
+	update(delta: number, paused = false): void {
+		if (!Number.isFinite(delta) || delta < 0)
+			throw new Error("Frame delta must be finite and nonnegative");
+		this.beforeVrmUpdate();
+		this.mixer?.update(paused ? 0 : delta);
+		this.base.vrm?.update(delta);
+		this.base.scene.updateWorldMatrix(true, true);
+		this.afterVrmUpdate(delta);
+	}
 	beforeVrmUpdate(): void {
 		this.requireLive();
 		this.restoreLayers();
@@ -251,6 +319,11 @@ export class AvatarCompositionSession {
 			// Refresh spring sorting after attachment through public manager APIs (see bindRig).
 			vrm?.springBoneManager?.update(delta);
 		}
+		// VRM expression updates can reset raw weights each frame. Explicit edits are
+		// the baseline; active composition writers still take precedence below.
+		for (const [mesh, edits] of this.userMorphs)
+			for (const [index, value] of edits)
+				mesh.morphTargetInfluences![index] = value;
 		this.evaluate("properties");
 	}
 	detach(id: string): void {
@@ -258,6 +331,7 @@ export class AvatarCompositionSession {
 		if (!item) return;
 		this.restoreLayers();
 		this.items.delete(id);
+		for (const mesh of item.asset.meshes) this.userMorphs.delete(mesh);
 		owners.delete(item.asset);
 		for (const undo of item.undo.reverse()) undo();
 		item.asset.scene.updateWorldMatrix(true, true);
@@ -266,6 +340,10 @@ export class AvatarCompositionSession {
 	}
 	dispose(): void {
 		if (this.disposed) return;
+		this.mixer?.stopAllAction();
+		this.mixer?.uncacheRoot(this.base.scene);
+		this.mixer = undefined;
+		this.userMorphs.clear();
 		for (const id of [...this.items.keys()]) this.detach(id);
 		this.restoreLayers();
 		this.deletion.dispose();
