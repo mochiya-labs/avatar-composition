@@ -88,6 +88,32 @@ export class AvatarCompositionSession {
 	private mixer: AnimationMixer | undefined;
 	private animation: AnimationClip | undefined;
 	private readonly userMorphs = new Map<Mesh, Map<number, number>>();
+	private readonly meshOwners = new Map<Mesh, Item>();
+	private readonly morphWriters = new Map<
+		Mesh,
+		Map<number, { item: Item; action: Compiled }[]>
+	>();
+	private indexMorphs() {
+		this.meshOwners.clear();
+		this.morphWriters.clear();
+		for (const item of [this.baseItem, ...this.items.values()]) {
+			for (const mesh of item.asset.meshes) this.meshOwners.set(mesh, item);
+			for (const action of item.actions) {
+				if (
+					action.action.type !== "morph.sync" &&
+					action.action.type !== "morph.override"
+				)
+					continue;
+				for (const { mesh, index } of action.morphTargets ?? []) {
+					let indices = this.morphWriters.get(mesh);
+					if (!indices) this.morphWriters.set(mesh, (indices = new Map()));
+					let writers = indices.get(index);
+					if (!writers) indices.set(index, (writers = []));
+					writers.push({ item, action });
+				}
+			}
+		}
+	}
 	private readonly deletion = new ShapeDeletion();
 	constructor(options: { base: AvatarAsset }) {
 		this.base = options.base;
@@ -117,6 +143,7 @@ export class AvatarCompositionSession {
 		};
 		this.baseItem.actions = this.compileComponents(this.baseItem);
 		this.checkGraph([this.baseItem]);
+		this.indexMorphs();
 		owners.set(this.base, this);
 		try {
 			this.evaluate();
@@ -194,12 +221,14 @@ export class AvatarCompositionSession {
 						: "attached";
 			item.appliedActions = item.actions.length;
 			this.items.set(item.id, item);
+			this.indexMorphs();
 			owners.set(asset, this);
 			this.evaluate();
 			return item;
 		} catch (error) {
 			this.restoreLayers();
 			this.items.delete(item.id);
+			this.indexMorphs();
 			owners.delete(asset);
 			for (const undo of item.undo.reverse()) undo();
 			this.evaluate();
@@ -247,31 +276,35 @@ export class AvatarCompositionSession {
 	}
 	/** Whether an active component currently owns this mesh weight. Geometry deletion alone does not drive it. */
 	isMorphControlled(mesh: Mesh, index: number): boolean {
-		const key = `${mesh.uuid}:morph:${index}`;
-		return this.orderedItems().some(
-			(item) =>
-				item.state.visible !== false &&
-				item.actions.some(
-					(action) => action.writes.includes(key) && action.condition(),
-				),
-		);
+		const writers = this.morphWriters.get(mesh)?.get(index);
+		if (!writers) return false;
+		for (const { item, action } of writers)
+			if (item.state.visible !== false && action.condition()) return true;
+		return false;
 	}
 	/** Edit any session-owned mesh without overriding a composition-driven weight. */
-	setMorph(mesh: Mesh, index: number, value: number): boolean {
+	setMorph(
+		mesh: Mesh,
+		index: number,
+		value: number,
+		options: { deferEvaluation?: boolean } = {},
+	): boolean {
 		this.requireLive();
 		if (!Number.isFinite(value)) throw new Error("Morph value must be finite");
 		if (
-			!this.orderedItems().some((item) => item.asset.meshes.includes(mesh)) ||
+			!this.meshOwners.has(mesh) ||
 			mesh.morphTargetInfluences?.[index] === undefined
 		)
 			throw new Error("Mesh morph is not owned by this session");
 		if (this.isMorphControlled(mesh, index)) return false;
-		this.restoreLayers();
+		// A deferred edit must not unwind unrelated visibility/material/morph layers
+		// between frames. The normal frame lifecycle restores them once.
+		if (!options.deferEvaluation) this.restoreLayers();
 		mesh.morphTargetInfluences[index] = value;
 		const edits = this.userMorphs.get(mesh) ?? new Map<number, number>();
 		edits.set(index, value);
 		this.userMorphs.set(mesh, edits);
-		this.evaluate();
+		if (!options.deferEvaluation) this.evaluate();
 		return true;
 	}
 	/** Supply a clip retargeted to the base. Attachments follow the base through composition. */
@@ -323,7 +356,8 @@ export class AvatarCompositionSession {
 		// the baseline; active composition writers still take precedence below.
 		for (const [mesh, edits] of this.userMorphs)
 			for (const [index, value] of edits)
-				mesh.morphTargetInfluences![index] = value;
+				if (mesh.morphTargetInfluences![index] !== value)
+					mesh.morphTargetInfluences![index] = value;
 		this.evaluate("properties");
 	}
 	detach(id: string): void {
@@ -331,6 +365,7 @@ export class AvatarCompositionSession {
 		if (!item) return;
 		this.restoreLayers();
 		this.items.delete(id);
+		this.indexMorphs();
 		for (const mesh of item.asset.meshes) this.userMorphs.delete(mesh);
 		owners.delete(item.asset);
 		for (const undo of item.undo.reverse()) undo();
@@ -348,6 +383,8 @@ export class AvatarCompositionSession {
 		this.restoreLayers();
 		this.deletion.dispose();
 		owners.delete(this.base);
+		this.meshOwners.clear();
+		this.morphWriters.clear();
 		this.disposed = true;
 	}
 	private requireLive() {

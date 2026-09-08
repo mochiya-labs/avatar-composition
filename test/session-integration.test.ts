@@ -74,11 +74,39 @@ it("preserves explicit mesh edits across VRM expressions and defers to active co
 	expect(session.setMorph(base.mesh, 0, 0.1)).toBe(false);
 	session.update(1 / 60);
 	expect(base.mesh.morphTargetInfluences![0]).toBe(0.8);
+	session.setMorph(attachment.mesh, 0, 0.2, { deferEvaluation: true });
+	// Editing another mesh must not briefly unwind the active base override.
+	expect(base.mesh.morphTargetInfluences![0]).toBe(0.8);
 	session.setItemState("coat", { visible: false });
 	expect(session.isMorphControlled(base.mesh, 0)).toBe(false);
 	session.update(1 / 60);
 	expect(base.mesh.morphTargetInfluences![0]).toBe(0.3);
 	session.detach("coat");
+	expect(() => session.setMorph(attachment.mesh, 0, 0.5)).toThrow("not owned");
+	session.dispose();
+});
+it("rewrites an explicit morph only when a VRM update changed its weight", () => {
+	const base = fixture();
+	const session = new AvatarCompositionSession({ base: base.asset });
+	session.setMorph(base.mesh, 0, 0.3);
+	const writes: number[] = [];
+	base.mesh.morphTargetInfluences = new Proxy(
+		base.mesh.morphTargetInfluences!,
+		{
+			set(target, property, value: number) {
+				if (property === "0") writes.push(value);
+				return Reflect.set(target, property, value);
+			},
+		},
+	);
+	vi.mocked(base.vrm.update).mockImplementation(() => undefined);
+	session.update(1 / 60);
+	expect(writes).toEqual([]);
+	vi.mocked(base.vrm.update).mockImplementation(() => {
+		base.mesh.morphTargetInfluences![0] = 0;
+	});
+	session.update(1 / 60);
+	expect(writes).toEqual([0, 0.3]);
 	session.dispose();
 });
 it("locks attachment weights driven by base synchronization", () => {
@@ -104,7 +132,9 @@ it("locks attachment weights driven by base synchronization", () => {
 	session.attach(attachment.asset, { id: "hair" });
 	expect(session.isMorphControlled(attachment.mesh, 0)).toBe(true);
 	expect(session.setMorph(attachment.mesh, 0, 0.6)).toBe(false);
-	session.setMorph(base.mesh, 0, 0.4);
+	session.setMorph(base.mesh, 0, 0.4, { deferEvaluation: true });
+	expect(base.mesh.morphTargetInfluences![0]).toBe(0.4);
+	expect(attachment.mesh.morphTargetInfluences![0]).toBe(0);
 	session.update(0.016);
 	expect(attachment.mesh.morphTargetInfluences![0]).toBe(0.4);
 	session.dispose();
