@@ -9,6 +9,10 @@
 		"url": "https://mochiya.org"
 	},
 	"homepage": "https://mochiya.org",
+	"publishConfig": {
+		"access": "public",
+		"registry": "https://registry.npmjs.org/"
+	},
 	"sideEffects": false,
 	"main": "./dist/index.js",
 	"types": "./dist/index.d.ts",
@@ -17,23 +21,10 @@
 			"types": "./dist/index.d.ts",
 			"import": "./dist/index.js"
 		},
-		"./schema": "./schema/MOCHIYA_avatar_composition.schema.json"
+		"./schema": "./dist/schema/MOCHIYA_avatar_composition.schema.json"
 	},
 	"files": [
-		"dist",
-		"src",
-		"schema",
-		"tsconfig.json",
-		"tsup.config.ts",
-		"scripts",
-		"examples/viewer/src",
-		"examples/viewer/index.html",
-		"examples/viewer/package.json",
-		"examples/viewer/tsconfig.json",
-		"examples/viewer/vite.config.ts",
-		"README.md",
-		"LICENSE",
-		"specification"
+		"dist"
 	],
 	"workspaces": [
 		"examples/viewer"
@@ -42,6 +33,7 @@
 		"format": "prettier --write .",
 		"format:check": "prettier --check .",
 		"build": "tsup && node scripts/generate-schema.mjs",
+		"prepublishOnly": "npm run format:check && npm run typecheck && npm run build && npm test",
 		"typecheck": "tsc --noEmit",
 		"test": "vitest run",
 		"viewer:dev": "npm run dev --workspace @mochiya/avatar-composition-viewer",

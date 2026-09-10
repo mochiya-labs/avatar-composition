@@ -41,7 +41,7 @@ Unity conversion preserves component boundaries and separate armatures. Generate
 
 ### Data and matching
 
-Delete uses the loaded base mesh's position deltas and restores polygons when disabled or detached. It keeps vertex buffers and morph weights intact. Missing geometry uses weight `0` with a warning; multi-frame Unity shapes and scale baking can affect parity. See the [deletion rules](specification/README.md#shape-changer-deletion) for thresholds and precedence.
+Delete uses the loaded base mesh's position deltas and restores polygons when disabled or detached. It keeps vertex buffers and morph weights intact. Missing geometry uses weight `0` with a warning; multi-frame Unity shapes and scale baking can affect parity. See the [deletion rules](dist/specification/README.md#shape-changer-deletion) for thresholds and precedence.
 
 | Data                            | Purpose                                                                                    |
 | ------------------------------- | ------------------------------------------------------------------------------------------ |
@@ -69,9 +69,21 @@ Delete uses the loaded base mesh's position deltas and restores polygons when di
 }
 ```
 
-This record belongs in `components` and assumes node 12 exists in the file. Bone pairs are computed at runtime. See the [behavior specification](specification/README.md) for defaults, conditions, matching and evaluation order, and the [JSON Schema](schema/MOCHIYA_avatar_composition.schema.json) for structure. The current draft replaces the old action/joint-mapping format: **re-export older assets**.
+This record belongs in `components` and assumes node 12 exists in the file. Bone pairs are computed at runtime. See the [behavior specification](dist/specification/README.md) for defaults, conditions, matching and evaluation order, and the [JSON Schema](dist/schema/MOCHIYA_avatar_composition.schema.json) for structure. The schema is also exported as `@mochiya/avatar-composition/schema`. The current draft replaces the old action/joint-mapping format: **re-export older assets**.
 
-## Install and try
+## Install
+
+Install the built tarball in your application with compatible peers; these versions are a reproducible example:
+
+```sh
+npm install /path/to/mochiya-avatar-composition-0.1.0.tgz three@0.185.1 @pixiv/three-vrm@3.5.5
+```
+
+After publication, the tarball path can be replaced with `@mochiya/avatar-composition@0.1.0`. Commit the application's package manifest and lockfile so deployment installs the same release. No source checkout or package build is needed on the deployment server. Keep one shared copy of Three.js and three-vrm in the host application.
+
+The package includes compiled ESM JavaScript, TypeScript declarations and the extension contract in `dist/`, plus npm's README, LICENSE and package metadata. Implementation source, source maps, development tools, tests, viewer files and model assets are excluded. Compiled JavaScript remains inspectable by consumers.
+
+## Try the example viewer (source checkout)
 
 Use Node.js 20.19+ for the viewer. A normal install uses the published `@mochiya/three-liltoon` package:
 
@@ -80,8 +92,6 @@ cd avatar-asset-runtime
 npm install
 npm run build
 npm run viewer:dev
-# Optional: package the library for installation in another application.
-npm pack
 ```
 
 To test unpublished changes from a sibling `three-liltoon/` checkout, build that package and apply a local install without changing the committed manifest or lockfile:
@@ -97,12 +107,6 @@ Run `npm install` again to restore the published dependency recorded in the lock
 Open Vite's URL (normally `http://127.0.0.1:5175`). **Load avatar**, then **Add attachment** using your VRM/GLB files. Select an asset to inspect its controls and matching results; hide or remove attachments to undo their effects. For any selected VRM, **Show debug visualizers** displays its available humanoid, look-at, constraint, spring-joint and collider helpers. This setting is independent for each asset and starts off. Optional base animations use VRMA files. All files stay in the browser.
 
 The viewer starts empty, with Assets, Preview and Inspector always available. The Inspector groups lilToon and composition warnings into collapsed accordions, provides per-mesh visibility and blendshape inspection, and shows a collapsed bone hierarchy for the selected asset. When the selected file contains `MOCHIYA_avatar_composition`, its extension debugger shows authored component instructions separately from resolved links, modified targets and skipped entries, with the complete manifest available. Panels stack below the preview on small screens. Lighting and the ground grid use fixed defaults; no demo models or stage settings are included.
-
-Install the tarball in your application with these example peer versions:
-
-```sh
-npm install /path/to/mochiya-avatar-composition-0.1.0.tgz three@0.185.1 @pixiv/three-vrm@3.5.5
-```
 
 ## Use in Three.js
 
@@ -198,7 +202,7 @@ const loader = new GLTFLoader()
 // On teardown: dispose the session and assets, then releaseRendering().
 ```
 
-The material plugin reads only `MOCHIYA_materials_liltoon`; the Mochiya plugin reads only `MOCHIYA_avatar_composition`. The helper enhances the standard VRM plugin with material loading and expression bindings; it also loads ordinary glTF/GLB without requiring VRM data. Outlines and casters follow ordinary material assignments automatically. Omitting lilToon leaves ordinary glTF fallback materials and attachment behavior available. See the [viewer engine](examples/viewer/src/engine.ts) for the complete lifecycle.
+The material plugin reads only `MOCHIYA_materials_liltoon`; the Mochiya plugin reads only `MOCHIYA_avatar_composition`. The helper enhances the standard VRM plugin with material loading and expression bindings; it also loads ordinary glTF/GLB without requiring VRM data. Outlines and casters follow ordinary material assignments automatically. Omitting lilToon leaves ordinary glTF fallback materials and attachment behavior available. The source checkout's `examples/viewer/src/engine.ts` demonstrates the complete lifecycle.
 
 ## Contributing
 
@@ -215,3 +219,19 @@ npm test
 npm run viewer:build
 npm run test:browser
 ```
+
+### npm distribution (maintainers)
+
+`npm run build` uses tsup and the existing schema generator to produce the runtime, schema and behavior guide under `dist`. The entire `dist/` directory is ignored by Git; do not commit generated distribution files. Source maps are disabled. There are no separate staging or package-check scripts.
+
+Before distributing a tarball:
+
+```sh
+npm run build
+npm pack --dry-run
+npm pack
+```
+
+Inspect the standard `npm pack --dry-run` output before release: it should contain only `dist/`, README, LICENSE and package metadata. Build before packing; there is no `prepare` or `prepack` hook. Consumers install the compiled package without running build or install lifecycle scripts.
+
+Publishing with `npm publish` runs formatting, TypeScript, build and runtime tests through npm's standard `prepublishOnly` hook and uses the public npm registry. Choose a new package version for later releases. The local viewer workspace is never included in the runtime archive.

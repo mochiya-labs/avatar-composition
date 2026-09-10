@@ -3,8 +3,9 @@ export default defineConfig({
 	entry: ["src/index.ts"],
 	format: ["esm"],
 	dts: true,
-	sourcemap: true,
+	// Distribute compiled code and declarations without the original sources.
+	sourcemap: false,
 	clean: true,
 	target: "es2022",
-	external: ["three", "@pixiv/three-vrm"],
+	external: ["three", /^three\//, "@pixiv/three-vrm"],
 });

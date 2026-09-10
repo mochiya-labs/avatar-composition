@@ -1,6 +1,6 @@
 # MOCHIYA_avatar_composition 0.1
 
-Draft glTF 2.0 extension for composing an avatar with attachments. This document defines behavior; the [JSON Schema](../schema/MOCHIYA_avatar_composition.schema.json) defines JSON structure. The [TypeScript schema](../src/schema.ts) generates that schema. Consumers also validate references and execution graphs.
+Draft glTF 2.0 extension for composing an avatar with attachments. This document defines behavior; the [JSON Schema](../schema/MOCHIYA_avatar_composition.schema.json) defines JSON structure. The runtime's TypeScript schema generates that JSON Schema. Consumers also validate references and execution graphs.
 
 The current draft replaces the earlier action/joint-mapping draft. Re-export older files. There is no legacy reader.
 

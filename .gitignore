@@ -11,3 +11,4 @@ test-results/
 
 test/unity-project/
 dist/
+*.tgz
