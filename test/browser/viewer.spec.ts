@@ -300,7 +300,9 @@ test("empty viewer has persistent panels and no demo or stage settings", async (
 		page.getByRole("complementary", { name: "Inspector", exact: true }),
 	).toBeVisible();
 	await expect(page.getByRole("main", { name: "Preview" })).toBeVisible();
-	await expect(page.getByRole("navigation")).toHaveCount(0);
+	await expect(
+		page.getByRole("navigation", { name: "Viewer navigation" }),
+	).toHaveCount(1);
 	await expect(page.getByRole("tab")).toHaveCount(0);
 	await expect(
 		page.getByRole("button", {
@@ -321,6 +323,58 @@ test("empty viewer has persistent panels and no demo or stage settings", async (
 		}),
 	).toEqual({ base: false, attachments: 0 });
 	await page.screenshot({ path: "test-results/viewer-empty.png" });
+});
+test("navigation preferences persist without replacing the loaded avatar", async ({
+	page,
+}) => {
+	await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
+	await page.goto("/");
+	await expect(
+		page.getByRole("link", { name: "Mochiya home" }),
+	).toHaveAttribute("href", "https://mochiya.org");
+	const github = page.getByRole("link", { name: /View source on GitHub/ });
+	await expect(github).toHaveAttribute(
+		"href",
+		"https://github.com/mochiya-labs/avatar-composition",
+	);
+	await expect(github).toHaveAttribute("target", "_blank");
+	await loadBase(page);
+	const sceneId = () =>
+		page.evaluate(
+			() =>
+				Reflect.get(window, "mochiyaViewer").getSnapshot().base.asset.scene
+					.uuid,
+		);
+	const before = await sceneId();
+	await page.getByRole("button", { name: "Language" }).focus();
+	await page.keyboard.press("Enter");
+	await page.getByRole("menuitemradio", { name: "日本語" }).click();
+	await expect(page.locator("html")).toHaveAttribute("lang", "ja");
+	await expect(page).toHaveTitle("アバターコンポジション — Mochiya");
+	await expect(
+		page.getByRole("button", { name: "言語", exact: true }),
+	).toBeFocused();
+	await page.getByRole("button", { name: "テーマを選択" }).click();
+	await page
+		.getByRole("menuitemradio", { name: "ダーク", exact: true })
+		.click();
+	await expect(page.locator("html")).toHaveClass("dark");
+	expect(await sceneId()).toBe(before);
+	await page.reload();
+	await expect(page.locator("html")).toHaveAttribute("lang", "ja");
+	await expect(page.locator("html")).toHaveClass("dark");
+	await page.getByRole("button", { name: "テーマを選択" }).click();
+	await page
+		.getByRole("menuitemradio", { name: "システム", exact: true })
+		.click();
+	await expect(page.locator("html")).toHaveClass("light");
+	await page.emulateMedia({ colorScheme: "dark" });
+	await expect(page.locator("html")).toHaveClass("dark");
+	await page.getByRole("button", { name: "言語", exact: true }).click();
+	await page.keyboard.press("Escape");
+	await expect(
+		page.getByRole("button", { name: "言語", exact: true }),
+	).toBeFocused();
 });
 test("local attachment controls, hide, removal and base replacement", async ({
 	page,
@@ -589,7 +643,8 @@ test("unmatched names warn while matched actions still run", async ({
 					.scene.visible,
 		),
 	).toBe(true);
-	await page.getByRole("button", { name: "Toggle theme" }).click();
+	await page.getByRole("button", { name: "Select theme" }).click();
+	await page.getByRole("menuitemradio", { name: "Dark", exact: true }).click();
 	await expect(page.locator("html")).toHaveClass("dark");
 	await page.screenshot({
 		path: "test-results/viewer-partial-dark.png",
@@ -696,8 +751,8 @@ test("mobile panels and Japanese controls remain usable without toggles", async 
 }) => {
 	await page.setViewportSize({ width: 390, height: 844 });
 	await page.goto("/");
-	await page.getByRole("combobox", { name: "Language" }).click();
-	await page.getByRole("option", { name: "日本語" }).click();
+	await page.getByRole("button", { name: "Language" }).click();
+	await page.getByRole("menuitemradio", { name: "日本語" }).click();
 	await expect(
 		page.getByRole("heading", { name: "ベースアバターから始めよう" }),
 	).toBeVisible();

@@ -1,23 +1,14 @@
-import {
-	useCallback,
-	useEffect,
-	useRef,
-	useState,
-	useSyncExternalStore,
-} from "react";
+import { useCallback, useRef, useState, useSyncExternalStore } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
 	ArrowsOutIcon,
-	CheckCircleIcon,
 	EyeIcon,
 	EyeSlashIcon,
 	FilePlusIcon,
 	InfoIcon,
-	MoonIcon,
 	PauseIcon,
 	PlayIcon,
 	PlusIcon,
-	SunIcon,
 	TShirtIcon,
 	TrashIcon,
 	UserIcon,
@@ -25,13 +16,9 @@ import {
 } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@/components/ui/select";
+import { useTheme } from "next-themes";
+import { ViewerHeader } from "./components/viewer-header";
+import { useViewerLocale } from "./use-viewer-locale";
 import {
 	Tooltip,
 	TooltipContent,
@@ -41,7 +28,7 @@ import {
 import { Stage } from "./Stage";
 import { ViewerEngine, type ViewerItem, type ViewerSnapshot } from "./engine";
 import { Inspector } from "./Inspector";
-import { messages, type Labels, type Locale } from "./i18n";
+import { messages, type Labels } from "./i18n";
 
 const empty: ViewerSnapshot = {
 	attachments: [],
@@ -144,17 +131,11 @@ export default function App() {
 		engine?.subscribe ?? subscribeEmpty,
 		engine?.getSnapshot ?? (() => empty),
 	);
-	const [locale, setLocale] = useState<Locale>("en");
+	const { locale, setLocale } = useViewerLocale();
 	const t: Labels = messages[locale];
-	const [dark, setDark] = useState(false);
+	const { resolvedTheme } = useTheme();
+	const dark = resolvedTheme === "dark";
 	const [frame, setFrame] = useState(0);
-	useEffect(() => {
-		const previous = document.documentElement.classList.contains("dark");
-		document.documentElement.classList.toggle("dark", dark);
-		return () => {
-			document.documentElement.classList.toggle("dark", previous);
-		};
-	}, [dark]);
 	const baseInput = useRef<HTMLInputElement>(null);
 	const attachmentInput = useRef<HTMLInputElement>(null);
 	const animationInput = useRef<HTMLInputElement>(null);
@@ -163,13 +144,6 @@ export default function App() {
 		view.selected === "base"
 			? view.base
 			: view.attachments.find((x) => x.id === view.selected);
-	const warnings =
-		view.warnings.length +
-		(view.base?.warnings.length ?? 0) +
-		view.attachments.reduce(
-			(n, x) => n + x.warnings.length + (x.result?.warnings.length ?? 0),
-			0,
-		);
 	const choose = (kind: "base" | "attachment" | "animation") =>
 		(kind === "base"
 			? baseInput
@@ -193,40 +167,12 @@ export default function App() {
 				}
 				lang={locale}
 			>
-				<header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b px-4 sm:px-5">
-					<div className="flex min-w-0 items-center gap-3">
-						<span className="text-lg font-bold tracking-tight">
-							mochiya<span className="text-primary">.</span>
-						</span>
-						<span className="hidden h-4 border-l sm:block" />
-						<h1 className="truncate text-xs text-muted-foreground">
-							{t.title}
-						</h1>
-						<Badge variant="outline" className="hidden md:flex">
-							{t.local}
-						</Badge>
-					</div>
-					<div className="flex shrink-0 items-center gap-1.5">
-						<Select
-							value={locale}
-							onValueChange={(v) => setLocale(v as Locale)}
-						>
-							<SelectTrigger className="w-20" aria-label={t.language}>
-								<SelectValue />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value="en">EN</SelectItem>
-								<SelectItem value="ja">日本語</SelectItem>
-							</SelectContent>
-						</Select>
-						<IconButton
-							label={t.theme}
-							onClick={() => setDark((value) => !value)}
-						>
-							{dark ? <SunIcon /> : <MoonIcon />}
-						</IconButton>
-					</div>
-				</header>
+				<ViewerHeader
+					title={t.title}
+					locale={locale}
+					onLocaleChange={setLocale}
+					t={t}
+				/>
 				<input
 					ref={baseInput}
 					type="file"
@@ -469,17 +415,6 @@ export default function App() {
 						/>
 					</aside>
 				</div>
-				<footer className="flex h-7 shrink-0 items-center justify-between border-t bg-sidebar px-4 text-[10px] text-muted-foreground">
-					<span className="flex items-center gap-1.5">
-						{warnings ? <WarningCircleIcon /> : <CheckCircleIcon />}
-						{view.busy
-							? t.loading
-							: warnings
-								? warnings + " " + t.review
-								: t.ready}
-					</span>
-					<span>{t.technical}</span>
-				</footer>
 			</div>
 		</TooltipProvider>
 	);

@@ -2,6 +2,8 @@
 
 Compose a base avatar with clothing, hair and other **attachments** in Three.js, with reversible rig binding, fit settings and controls. This package is the maintenance home of the **`MOCHIYA_avatar_composition` glTF extension**, its schema and runtime behavior.
 
+Source: [mochiya-labs/avatar-composition](https://github.com/mochiya-labs/avatar-composition). Export avatars and attachments from Unity with [Mochiya Avatar Tools](https://github.com/mochiya-labs/unity-avatar-tools).
+
 ```mermaid
 flowchart LR
   Unity["Mochiya Unity exporter"] --> File["Avatar or attachment<br/>VRM / GLB + Mochiya data"]
@@ -41,7 +43,7 @@ Unity conversion preserves component boundaries and separate armatures. Generate
 
 ### Data and matching
 
-Delete uses the loaded base mesh's position deltas and restores polygons when disabled or detached. It keeps vertex buffers and morph weights intact. Missing geometry uses weight `0` with a warning; multi-frame Unity shapes and scale baking can affect parity. See the [deletion rules](dist/specification/README.md#shape-changer-deletion) for thresholds and precedence.
+Delete uses the loaded base mesh's position deltas and restores polygons when disabled or detached. It keeps vertex buffers and morph weights intact. Missing geometry uses weight `0` with a warning; multi-frame Unity shapes and scale baking can affect parity. See the [deletion rules](https://github.com/mochiya-labs/avatar-composition/blob/main/specification/README.md#shape-changer-deletion) for thresholds and precedence.
 
 | Data                            | Purpose                                                                                    |
 | ------------------------------- | ------------------------------------------------------------------------------------------ |
@@ -69,7 +71,7 @@ Delete uses the loaded base mesh's position deltas and restores polygons when di
 }
 ```
 
-This record belongs in `components` and assumes node 12 exists in the file. Bone pairs are computed at runtime. See the [behavior specification](dist/specification/README.md) for defaults, conditions, matching and evaluation order, and the [JSON Schema](dist/schema/MOCHIYA_avatar_composition.schema.json) for structure. The schema is also exported as `@mochiya/avatar-composition/schema`. The current draft replaces the old action/joint-mapping format: **re-export older assets**.
+This record belongs in `components` and assumes node 12 exists in the file. Bone pairs are computed at runtime. See the [behavior specification](https://github.com/mochiya-labs/avatar-composition/blob/main/specification/README.md) for defaults, conditions, matching and evaluation order, and the [JSON Schema](https://github.com/mochiya-labs/avatar-composition/blob/main/schema/MOCHIYA_avatar_composition.schema.json) for structure. The schema is also exported as `@mochiya/avatar-composition/schema`. The current draft replaces the old action/joint-mapping format: **re-export older assets**.
 
 ## Install
 
@@ -88,13 +90,15 @@ The package includes compiled ESM JavaScript, TypeScript declarations and the ex
 Use Node.js 20.19+ for the viewer. A normal install uses the published `@mochiya/three-liltoon` package:
 
 ```sh
-cd avatar-asset-runtime
+git clone https://github.com/mochiya-labs/avatar-composition.git
+cd avatar-composition/examples/viewer
 npm install
-npm run build
-npm run viewer:dev
+npm run dev
 ```
 
-To test unpublished changes from a sibling `three-liltoon/` checkout, build that package and apply a local install without changing the committed manifest or lockfile:
+Run `npm run build` from `examples/viewer` to create the production site in that directory's `dist/`, then `npm run preview` to serve it locally. npm uses the repository's workspace and root lockfile when installing from the viewer directory. The viewer compiles Avatar Composition's source directly; it does not need the library's ignored `dist/` or a separate library build. The repository-root `viewer:dev` and `viewer:build` scripts remain convenient alternatives.
+
+To test unpublished changes from a sibling `three-liltoon/` checkout, run these commands from the Avatar Composition repository root. They build that package and apply a local install without changing the committed manifest or lockfile:
 
 ```sh
 npm --prefix ../three-liltoon run build:package
@@ -107,6 +111,23 @@ Run `npm install` again to restore the published dependency recorded in the lock
 Open Vite's URL (normally `http://127.0.0.1:5175`). **Load avatar**, then **Add attachment** using your VRM/GLB files. Select an asset to inspect its controls and matching results; hide or remove attachments to undo their effects. For any selected VRM, **Show debug visualizers** displays its available humanoid, look-at, constraint, spring-joint and collider helpers. This setting is independent for each asset and starts off. Optional base animations use VRMA files. All files stay in the browser.
 
 The viewer starts empty, with Assets, Preview and Inspector always available. The Inspector groups lilToon and composition warnings into collapsed accordions, provides per-mesh visibility and blendshape inspection, and shows a collapsed bone hierarchy for the selected asset. When the selected file contains `MOCHIYA_avatar_composition`, its extension debugger shows authored component instructions separately from resolved links, modified targets and skipped entries, with the complete manifest available. Panels stack below the preview on small screens. Lighting and the ground grid use fixed defaults; no demo models or stage settings are included.
+
+The navigation matches the lilToon viewer and Mochiya website, with the Mochiya mascot and wordmark, a [GitHub source link](https://github.com/mochiya-labs/avatar-composition), an English/日本語 menu, and Light/Dark/System appearance choices. Language and appearance preferences are saved in the browser. Changing them preserves the current avatar composition.
+
+### Deploy the viewer to Vercel
+
+Import `mochiya-labs/avatar-composition` and use these project settings:
+
+| Setting                                                              | Value                                              |
+| -------------------------------------------------------------------- | -------------------------------------------------- |
+| Root Directory                                                       | `examples/viewer`                                  |
+| Framework Preset                                                     | Vite                                               |
+| Install Command                                                      | Default (automatic npm installation)               |
+| Build Command                                                        | Default (`npm run build`)                          |
+| Output Directory                                                     | Default (`dist`, relative to the viewer directory) |
+| Include source files outside of the Root Directory in the Build Step | Enabled                                            |
+
+Leave the install, build and output override switches off. The repository root must be included because it contains the workspace lockfile and the Avatar Composition source. This uses the same viewer-directory/default-command deployment flow as the three-liltoon example, with Vite providing this viewer's framework defaults. No custom Vercel configuration file or library build step is required.
 
 ## Use in Three.js
 
@@ -187,7 +208,7 @@ The core never inspects shader uniforms or custom texture caches. `disposeAvatar
 
 ### Optional lilToon rendering
 
-Install `@mochiya/three-liltoon` in the **application** and configure it independently. The sample viewer demonstrates this setup; the core works without the material package.
+Install [`@mochiya/three-liltoon`](https://github.com/mochiya-labs/three-liltoon) in the **application** and configure it independently. The sample viewer demonstrates this setup; the core works without the material package.
 
 ```ts
 import { enableLilToon } from "@mochiya/three-liltoon";

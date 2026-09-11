@@ -9,6 +9,13 @@
 		"url": "https://mochiya.org"
 	},
 	"homepage": "https://mochiya.org",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/mochiya-labs/avatar-composition.git"
+	},
+	"bugs": {
+		"url": "https://github.com/mochiya-labs/avatar-composition/issues"
+	},
 	"publishConfig": {
 		"access": "public",
 		"registry": "https://registry.npmjs.org/"
