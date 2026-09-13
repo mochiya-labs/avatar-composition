@@ -1,6 +1,6 @@
 import { Bone, Matrix4, Quaternion, Vector3, type Object3D } from "three";
 import { AvatarAsset } from "./asset.js";
-import { NameResolver, keywordScore } from "./matching.js";
+import { NameResolver } from "./matching.js";
 import {
 	CompositionError,
 	type CompositionWarning,
@@ -123,62 +123,46 @@ export function bindArmatures(
 		);
 		if (component.type !== "mergeArmature") continue;
 		const { prefix, suffix } = component;
-		const targetRoot = rootMatch.value;
-		const pool = [...base.nodes.values()].filter(
-			(n) =>
-				!base.nodeMeshes(n).length &&
-				(!targetRoot || isDescendant(n, targetRoot)),
+		const candidates = [...base.nodes.values()].filter(
+			(node) => !base.nodeMeshes(node).length,
 		);
-		function walk(parent: Object3D, matchedParent?: Object3D) {
+		function walk(parent: Object3D, matchedParent: Object3D) {
 			for (const child of parent.children) {
 				const index = asset.indices.get(child);
 				if (index !== undefined && roots.has(index)) continue;
 				if (asset.nodeMeshes(child).length) continue;
-				const names = (asset.names.get(child) ?? [child.name]).map((name) =>
-					name.startsWith(prefix) &&
-					name.endsWith(suffix) &&
-					name.length > prefix.length + suffix.length
-						? name.slice(prefix.length, suffix ? -suffix.length : undefined)
-						: name,
-				);
+				const names = exactNames(asset, child)
+					.filter(
+						(name) =>
+							name.startsWith(prefix) &&
+							name.endsWith(suffix) &&
+							name.length > prefix.length + suffix.length,
+					)
+					.map((name) =>
+						name.slice(prefix.length, suffix ? -suffix.length : undefined),
+					);
 				const query: Selector = { asset: "base", boneKeywords: names };
-				const rank = (nodes: Object3D[]) =>
-					nodes
-						.map((node) => ({
-							node,
-							score: Math.max(
-								0,
-								...names.flatMap((q) =>
-									(base.names.get(node) ?? [node.name]).map((n) =>
-										keywordScore(n, q),
-									),
-								),
-							),
-						}))
-						.filter((x) => x.score > 0)
-						.sort((a, b) => b.score - a.score);
-				let ranked = rank(
-					pool.filter((n) => base.authoredParents.get(n) === matchedParent),
+				// MA matches only the corresponding parent's direct children.
+				const matches = candidates.filter(
+					(node) =>
+						base.authoredParents.get(node) === matchedParent &&
+						exactNames(base, node).some((name) => names.includes(name)),
 				);
-				if (!ranked.length) ranked = rank(pool);
-				const target =
-					ranked.length &&
-					(ranked.length === 1 || ranked[0].score > ranked[1].score)
-						? ranked[0].node
-						: undefined;
+				const target = matches.length === 1 ? matches[0] : undefined;
 				if (!target)
 					warnings.push({
 						...resolver.warning(
 							query,
-							ranked.map((x) => x.node.name),
+							matches.map((node) => node.name),
 						),
 						operation: component.id,
 					});
 				if (index !== undefined) record(child, target, component.id, query);
-				walk(child, target);
+				// Preserve unmatched branches; nested components are processed separately.
+				if (target) walk(child, target);
 			}
 		}
-		walk(source, targetRoot);
+		if (rootMatch.value) walk(source, rootMatch.value);
 	}
 	// Host-assigned assets without an extension retain the documented name fallback.
 	if (!asset.manifest)
@@ -268,7 +252,10 @@ export function bindArmatures(
 	asset.scene.updateWorldMatrix(true, true);
 	return { matched, requested };
 }
-function isDescendant(node: Object3D, root: Object3D) {
-	for (let p = node.parent; p; p = p.parent) if (p === root) return true;
-	return false;
+
+// GLTFLoader may sanitize names (for example spaces to underscores).
+// Prefer exported originals/aliases so that sanitization cannot create a match.
+function exactNames(asset: AvatarAsset, node: Object3D): string[] {
+	const names = asset.names.get(node) ?? [node.name];
+	return names.length > 1 ? names.filter((name) => name !== node.name) : names;
 }

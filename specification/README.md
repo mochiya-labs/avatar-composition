@@ -94,7 +94,7 @@ Every record has `id`, `type`, and file-local `sourceNode` identifying the GameO
 
 ### Armatures and physics
 
-Strip the configured prefix/suffix from descendant names before matching. Prefer matching children beneath the resolved parent; broaden the search beneath the target root when needed. If the root is missing, a global base search may recover descendants. Missing intermediate bones do not end traversal. Another component's source root starts an independent traversal; mesh subtrees are not treated as bone chains.
+Automatic descendant matching uses exact, case-sensitive names and exported aliases. A name must contain the configured case-sensitive prefix and suffix; strip them before comparison. Search only authored direct children of the matched target parent. Never broaden the search to other branches, deeper descendants or the global base. An unmatched bone preserves its entire branch and ends that traversal. A missing root target does not trigger descendant recovery. Another component's source root is handled independently; mesh subtrees are not bone chains. Explicit root selectors and Bone Proxy selectors retain their existing resolution rules.
 
 The runtime implements **unidirectional base-to-attachment following**. `bidirectional` and `notLocked` retain the MA setting but MUST warn and fall back to unidirectional behavior. These values describe MA's authoring position-lock setting; this runtime does not reproduce MA's build-time skeleton collapse. It retains the source bones, skin weights, inverse-bind matrices and rest offsets. `mangleNames` is retained as intent; independent instance ownership avoids name mutation. Local-to-local merges are preserved as records but warn and remain unapplied.
 
